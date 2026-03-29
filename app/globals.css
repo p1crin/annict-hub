@@ -1,26 +1,215 @@
 @import "tailwindcss";
 
+/* Google Fonts - Quicksand & Poppins */
+@import url('https://fonts.googleapis.com/css2?family=Quicksand:wght@300;400;500;600;700&family=Poppins:wght@300;400;500;600;700&display=swap');
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* Soft Pastel × Kawaii Color Palette */
+  --peach: #FFD4D4;
+  --peach-light: #FFE8E8;
+  --peach-dark: #FFB8B8;
+
+  --lavender: #E5D4FF;
+  --lavender-light: #F2E8FF;
+  --lavender-dark: #D4BCFF;
+
+  --mint: #D4FFE5;
+  --mint-light: #E8FFF2;
+  --mint-dark: #BCFFD4;
+
+  --baby-blue: #D4E5FF;
+  --baby-blue-light: #E8F2FF;
+  --baby-blue-dark: #BCD4FF;
+
+  --soft-yellow: #FFF4D4;
+  --soft-yellow-light: #FFF9E8;
+  --soft-yellow-dark: #FFE8BC;
+
+  /* Neutral Colors */
+  --white: #FFFFFF;
+  --soft-white: #FAFAFA;
+  --gray-100: #F5F5F5;
+  --gray-200: #E8E8E8;
+  --gray-300: #D4D4D4;
+  --gray-400: #A8A8A8;
+  --gray-500: #7C7C7C;
+  --gray-600: #505050;
+  --gray-700: #3C3C3C;
+  --gray-800: #282828;
+  --gray-900: #1C1C1C;
+
+  /* Semantic Colors */
+  --background: var(--soft-white);
+  --foreground: var(--gray-800);
+  --primary: var(--lavender);
+  --primary-foreground: var(--gray-800);
+  --secondary: var(--peach);
+  --accent: var(--mint);
+  --muted: var(--gray-200);
+  --muted-foreground: var(--gray-500);
+
+  /* Gradients */
+  --gradient-pastel: linear-gradient(135deg, var(--peach) 0%, var(--lavender) 50%, var(--mint) 100%);
+  --gradient-soft: linear-gradient(135deg, var(--soft-yellow) 0%, var(--peach-light) 100%);
+  --gradient-dreamy: linear-gradient(135deg, var(--lavender-light) 0%, var(--baby-blue-light) 50%, var(--mint-light) 100%);
 }
 
 @theme inline {
+  /* Colors */
+  --color-peach: var(--peach);
+  --color-peach-light: var(--peach-light);
+  --color-peach-dark: var(--peach-dark);
+  --color-lavender: var(--lavender);
+  --color-lavender-light: var(--lavender-light);
+  --color-lavender-dark: var(--lavender-dark);
+  --color-mint: var(--mint);
+  --color-mint-light: var(--mint-light);
+  --color-mint-dark: var(--mint-dark);
+  --color-baby-blue: var(--baby-blue);
+  --color-baby-blue-light: var(--baby-blue-light);
+  --color-baby-blue-dark: var(--baby-blue-dark);
+  --color-soft-yellow: var(--soft-yellow);
+  --color-soft-yellow-light: var(--soft-yellow-light);
+  --color-soft-yellow-dark: var(--soft-yellow-dark);
+
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-accent: var(--accent);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  /* Fonts */
+  --font-heading: 'Quicksand', sans-serif;
+  --font-body: 'Poppins', sans-serif;
+  --font-sans: 'Poppins', sans-serif;
+
+  /* Border Radius */
+  --radius-sm: 12px;
+  --radius-md: 16px;
+  --radius-lg: 20px;
+  --radius-xl: 24px;
+  --radius-full: 9999px;
+
+  /* Shadows */
+  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.06);
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.08);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.1);
+  --shadow-xl: 0 12px 32px rgba(0, 0, 0, 0.12);
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-body);
+  font-weight: 400;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-heading);
+  font-weight: 600;
+}
+
+/* Custom Scrollbar - Pastel Theme */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--gray-100);
+  border-radius: var(--radius-full);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--lavender);
+  border-radius: var(--radius-full);
+  transition: background 0.2s;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--lavender-dark);
+}
+
+/* Selection */
+::selection {
+  background: var(--lavender-light);
+  color: var(--foreground);
+}
+
+/* Animations */
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+@keyframes sparkle {
+  0%, 100% {
+    opacity: 0.3;
+    transform: scale(0.8);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.2);
+  }
+}
+
+@keyframes bounce-soft {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-8px);
+  }
+}
+
+/* Utility Classes */
+.gradient-pastel {
+  background: var(--gradient-pastel);
+}
+
+.gradient-soft {
+  background: var(--gradient-soft);
+}
+
+.gradient-dreamy {
+  background: var(--gradient-dreamy);
+}
+
+.text-gradient {
+  background: var(--gradient-pastel);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.glass-effect {
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+.shadow-pastel {
+  box-shadow: 0 8px 32px rgba(229, 212, 255, 0.3);
+}
+
+.animate-float {
+  animation: float 3s ease-in-out infinite;
+}
+
+.animate-sparkle {
+  animation: sparkle 2s ease-in-out infinite;
+}
+
+.animate-bounce-soft {
+  animation: bounce-soft 1.5s ease-in-out infinite;
 }
