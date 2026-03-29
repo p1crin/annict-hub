@@ -1,8 +1,5 @@
 @import "tailwindcss";
 
-/* Google Fonts - Quicksand & Poppins */
-@import url('https://fonts.googleapis.com/css2?family=Quicksand:wght@300;400;500;600;700&family=Poppins:wght@300;400;500;600;700&display=swap');
-
 :root {
   /* Soft Pastel × Kawaii Color Palette */
   --peach: #FFD4D4;
@@ -81,10 +78,10 @@
   --color-muted: var(--muted);
   --color-muted-foreground: var(--muted-foreground);
 
-  /* Fonts */
-  --font-heading: 'Quicksand', sans-serif;
-  --font-body: 'Poppins', sans-serif;
-  --font-sans: 'Poppins', sans-serif;
+  /* Fonts - Using Next.js next/font */
+  --font-heading: var(--font-quicksand), sans-serif;
+  --font-body: var(--font-poppins), sans-serif;
+  --font-sans: var(--font-poppins), sans-serif;
 
   /* Border Radius */
   --radius-sm: 12px;

@@ -30,12 +30,18 @@ export interface AnimeWithThemes extends AnimeCardData {
 
 export interface ThemeSongData {
   id: string;
+  annictWorkId: number;
   type: 'OP' | 'ED';
   sequence: number;
   title: string;
   artist?: string;
   episodes?: string;
   videoUrl?: string;
+  audioUrl?: string;
+  source: 'animethemes' | 'jikan' | 'manual';
+  confidence?: 'high' | 'medium' | 'low';
+  animethemesAnimeId?: number;
+  animethemesThemeId?: number;
   spotifyMatch?: SpotifyMatchData;
 }
 
