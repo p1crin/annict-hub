@@ -60,30 +60,40 @@ export async function GET(request: NextRequest) {
         if (cacheAge < twentyFourHours) {
           console.log(`Using cached data (${typedCache.length} items, ${Math.round(cacheAge / 1000 / 60)} minutes old)`);
 
-          // Convert cached data to AnimeCardData
-          const animeData: AnimeCardData[] = typedCache.map((anime) => ({
-            id: `${anime.annict_work_id}`,
-            annictWorkId: anime.annict_work_id,
-            title: anime.title,
-            titleEn: anime.title_en,
-            imageUrl: anime.image_url || '/placeholder-anime.png',
-            seasonYear: anime.season_year,
-            seasonName: anime.season_name,
-            status: 'WATCHED' as AnnictStatus,
-            hasThemes: false,
-            themesCount: 0,
-          }));
+          // If cache count is a multiple of 50, it might be incomplete
+          // Force a refresh to get all data
+          if (typedCache.length > 0 && typedCache.length % 50 === 0 && !forceRefresh) {
+            console.log(`⚠️  Cache has exactly ${typedCache.length} items (multiple of 50). Triggering full refresh to ensure complete data.`);
+            // Don't use cache, fall through to fetch from Annict
+          } else {
+            // Convert cached data to AnimeCardData
+            const animeData: AnimeCardData[] = typedCache.map((anime) => ({
+              id: `${anime.annict_work_id}`,
+              annictWorkId: anime.annict_work_id,
+              title: anime.title,
+              titleEn: anime.title_en,
+              imageUrl: anime.image_url || '/placeholder-anime.png',
+              seasonYear: anime.season_year,
+              seasonName: anime.season_name,
+              malAnimeId: anime.mal_anime_id,
+              status: 'WATCHED' as AnnictStatus,
+              hasThemes: false,
+              themesCount: 0,
+            }));
 
-          return NextResponse.json({
-            success: true,
-            data: animeData,
-            total: animeData.length,
-            filtered: animeData.length,
-            cached: true,
-            cacheAge: Math.round(cacheAge / 1000 / 60), // minutes
-            hasMore: false,
-            endCursor: null,
-          });
+            console.log(`✅ Returning complete cached data (${animeData.length} items)`);
+
+            return NextResponse.json({
+              success: true,
+              data: animeData,
+              total: animeData.length,
+              filtered: animeData.length,
+              cached: true,
+              cacheAge: Math.round(cacheAge / 1000 / 60), // minutes
+              hasMore: false,
+              endCursor: null,
+            });
+          }
         }
       }
     }
