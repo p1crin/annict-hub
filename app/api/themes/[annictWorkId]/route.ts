@@ -46,10 +46,11 @@ export async function GET(
 
     console.log(`Fetching themes for anime ${annictWorkId}`);
 
-    // Fetch anime info from cache first (needed for anime_cache_id)
+    // Fetch anime info from cache first (needed for anime_cache_id, filtered by user)
     const { data: animeCache }: { data: AnimeCacheRow | null } = await supabase
       .from('anime_cache')
       .select('*')
+      .eq('annict_user_id', session.user.annictId)
       .eq('annict_work_id', annictWorkId)
       .maybeSingle() as { data: AnimeCacheRow | null };
 

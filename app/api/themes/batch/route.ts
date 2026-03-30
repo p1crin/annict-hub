@@ -48,10 +48,11 @@ export async function POST(request: NextRequest) {
 
     console.log(`Processing batch themes for ${anime.length} anime`);
 
-    // Fetch anime from cache to get their IDs
+    // Fetch anime from cache to get their IDs (filtered by user)
     const { data: animeCacheData }: { data: AnimeCacheRow[] | null } = await supabase
       .from('anime_cache')
       .select('*')
+      .eq('annict_user_id', session.user.annictId)
       .in('annict_work_id', anime.map(a => a.annictWorkId)) as { data: AnimeCacheRow[] | null };
 
     const animeCacheMap = new Map(

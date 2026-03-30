@@ -128,7 +128,7 @@ function StatusBadge({ status }: { status: string }) {
   const badges: Record<string, { label: string; className: string }> = {
     WATCHING: {
       label: '視聴中',
-      className: 'bg-gradient-to-r from-mint to-baby-blue text-white',
+      className: 'bg-gradient-to-r from-mint to-sky-200 text-sky-800',
     },
     WATCHED: {
       label: '視聴済',
