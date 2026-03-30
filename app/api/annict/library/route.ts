@@ -77,7 +77,7 @@ export async function GET(request: NextRequest) {
               seasonYear: anime.season_year,
               seasonName: anime.season_name,
               malAnimeId: anime.mal_anime_id,
-              status: 'WATCHED' as AnnictStatus,
+              status: (anime.status || 'WATCHED') as AnnictStatus,
               hasThemes: false,
               themesCount: 0,
             }));
@@ -175,6 +175,7 @@ export async function GET(request: NextRequest) {
         season_year: work.seasonYear,
         season_name: work.seasonName,
         image_url: imageUrl,
+        status: entry.status.state,
         synced_at: new Date().toISOString(),
       };
       cacheDataBatch.push(cacheData);

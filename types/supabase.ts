@@ -76,6 +76,7 @@ export interface AnimeCacheRow {
   twitter_username?: string;
   animethemes_anime_id?: number; // Matched AnimeThemes.moe ID
   animethemes_slug?: string;
+  status?: string; // User's watch status: 'WANNA_WATCH' | 'WATCHING' | 'WATCHED' | 'ON_HOLD' | 'STOP_WATCHING' | 'NO_STATUS'
   synced_at: string; // ISO timestamp
   created_at: string; // ISO timestamp
 }
