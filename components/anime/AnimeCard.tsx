@@ -132,19 +132,19 @@ function StatusBadge({ status }: { status: string }) {
     },
     WATCHED: {
       label: '視聴済',
-      className: 'bg-gradient-to-r from-lavender to-peach text-white',
+      className: 'bg-gradient-to-r from-emerald-400 to-green-500 text-white',
     },
     WANNA_WATCH: {
       label: '見たい',
-      className: 'bg-gradient-to-r from-soft-yellow to-peach-light text-gray-700',
+      className: 'bg-gradient-to-r from-yellow-200 to-orange-200 text-gray-700',
     },
     ON_HOLD: {
       label: '中断',
-      className: 'bg-gray-400 text-white',
+      className: 'bg-amber-400 text-white',
     },
     STOP_WATCHING: {
       label: '視聴停止',
-      className: 'bg-gray-600 text-white',
+      className: 'bg-gray-500 text-white',
     },
   };
 
