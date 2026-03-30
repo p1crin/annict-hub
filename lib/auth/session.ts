@@ -98,10 +98,22 @@ export async function getSession(): Promise<AppSession | null> {
   }
 
   try {
-    const session: AppSession = JSON.parse(sessionCookie.value);
+    const parsed = JSON.parse(sessionCookie.value);
+
+    // Convert date strings back to Date objects
+    const session: AppSession = {
+      ...parsed,
+      expiresAt: new Date(parsed.expiresAt),
+      spotifyToken: parsed.spotifyToken
+        ? {
+            ...parsed.spotifyToken,
+            expiresAt: new Date(parsed.spotifyToken.expiresAt),
+          }
+        : undefined,
+    };
 
     // Check if session is expired
-    if (new Date(session.expiresAt) < new Date()) {
+    if (session.expiresAt < new Date()) {
       await destroySession();
       return null;
     }
