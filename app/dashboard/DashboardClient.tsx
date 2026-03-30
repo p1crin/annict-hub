@@ -225,6 +225,12 @@ export default function DashboardClient({ session }: DashboardClientProps) {
 
   // Filter anime
   const filteredAnime = useMemo(() => {
+    // Defensive check: ensure anime is an array
+    if (!Array.isArray(anime)) {
+      console.error('anime is not an array:', anime);
+      return [];
+    }
+
     let filtered = anime;
 
     // Filter by status
@@ -255,6 +261,12 @@ export default function DashboardClient({ session }: DashboardClientProps) {
 
   // Get available seasons
   const availableSeasons = useMemo(() => {
+    // Defensive check: ensure anime is an array
+    if (!Array.isArray(anime)) {
+      console.error('anime is not an array in availableSeasons:', anime);
+      return [];
+    }
+
     const seasons = new Set<string>();
     anime.forEach((a) => {
       if (a.seasonYear && a.seasonName) {

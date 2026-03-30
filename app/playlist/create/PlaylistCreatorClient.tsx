@@ -132,7 +132,10 @@ export default function PlaylistCreatorClient({ session }: PlaylistCreatorClient
       }
 
       const data = await response.json();
-      setMatches(data.matches);
+
+      // Convert matches object to array
+      const matchesArray = Object.values(data.matches) as SpotifyMatchResult[];
+      setMatches(matchesArray);
       setCurrentStep('review');
 
     } catch (err: any) {
