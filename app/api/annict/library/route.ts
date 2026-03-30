@@ -43,12 +43,12 @@ export async function GET(request: NextRequest) {
     const useCache = searchParams.get('cache') !== 'false'; // Default to true
 
     // If using cache, try to get from Supabase first (only on initial load)
+    // Always get all cached data (ignore limit parameter for cache)
     if (useCache && !forceRefresh && !afterCursor) {
       const { data: cachedAnime, error: cacheError } = await supabase
         .from('anime_cache')
         .select('*')
-        .order('synced_at', { ascending: false })
-        .limit(limitParam ? parseInt(limitParam, 10) : 1000);
+        .order('synced_at', { ascending: false });
 
       if (!cacheError && cachedAnime && cachedAnime.length > 0) {
         const typedCache = cachedAnime as AnimeCacheRow[];

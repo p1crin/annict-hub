@@ -74,10 +74,19 @@ export default function DashboardClient({ session }: DashboardClientProps) {
     try {
       // Build query parameters
       const params = new URLSearchParams();
-      if (!isInitial && endCursor) {
-        params.set('after', endCursor);
+
+      if (isInitial) {
+        // Initial load: try to use cache (no limit to get all cached data)
+        // If no cache, fetch 50 from Annict
+        params.set('limit', '50');
+      } else {
+        // Background pagination: always fetch from Annict
+        params.set('cache', 'false');
+        params.set('limit', '50');
+        if (endCursor) {
+          params.set('after', endCursor);
+        }
       }
-      params.set('limit', '50');
 
       const response = await fetch(`/api/annict/library?${params}`);
       if (!response.ok) {
@@ -98,21 +107,29 @@ export default function DashboardClient({ session }: DashboardClientProps) {
       setHasMore(data.hasMore || false);
       setEndCursor(data.endCursor || null);
 
-      console.log(`Fetched ${data.data?.length || 0} anime (cached: ${data.cached}, hasMore: ${data.hasMore})`);
+      console.log(`Fetched ${data.data?.length || 0} anime (cached: ${data.cached}, hasMore: ${data.hasMore}, endCursor: ${data.endCursor})`);
+      console.log(`Total anime now: ${isInitial ? (data.data?.length || 0) : (anime.length + (data.data?.length || 0))}`);
 
       // If there are more anime to fetch, trigger background sync
-      if (isInitial && data.hasMore) {
-        if (data.cached) {
-          console.log('Starting background sync for remaining cached anime...');
-        } else {
-          console.log('Starting background fetch for remaining anime (initial load)...');
+      if (data.hasMore) {
+        if (isInitial) {
+          if (data.cached) {
+            console.log('🔄 Starting background sync for remaining cached anime...');
+          } else {
+            console.log('🔄 Starting background fetch for remaining anime (initial load)...');
+          }
+          setIsBackgroundSyncing(true);
         }
-        setIsBackgroundSyncing(true);
-        setTimeout(() => fetchAnimeLibrary(false), 500);
-      } else if (!data.hasMore && isBackgroundSyncing) {
-        // Background sync completed
-        setIsBackgroundSyncing(false);
-        console.log(`Background sync completed. Total: ${anime.length + (data.data?.length || 0)} anime`);
+        setTimeout(() => {
+          console.log('📥 Triggering next page fetch...');
+          fetchAnimeLibrary(false);
+        }, 500);
+      } else {
+        // No more data
+        if (isBackgroundSyncing) {
+          setIsBackgroundSyncing(false);
+          console.log(`✅ Background sync completed. Total: ${anime.length + (data.data?.length || 0)} anime`);
+        }
       }
     } catch (error) {
       console.error('Error fetching library:', error);
