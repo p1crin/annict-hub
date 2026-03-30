@@ -19,11 +19,14 @@ import type {
 // ========================================
 
 export async function getUserByAnnictId(annictId: number): Promise<UserRow | null> {
-  const { data, error } = await supabase
+  // Use service role client to bypass RLS
+  const client = getServiceRoleClient();
+
+  const { data, error } = await client
     .from('users')
     .select('*')
     .eq('annict_id', annictId)
-    .single();
+    .maybeSingle();
 
   if (error) {
     console.error('Error fetching user:', error);
