@@ -171,11 +171,11 @@ function StatusBadge({ status }: { status: string }) {
  */
 function getSeasonEmoji(season: string): string {
   const seasonMap: Record<string, string> = {
-    WINTER: '❄️',
-    SPRING: '🌸',
-    SUMMER: '☀️',
-    AUTUMN: '🍂',
-    FALL: '🍂',
+    WINTER: '冬',
+    SPRING: '春',
+    SUMMER: '夏',
+    AUTUMN: '秋',
+    FALL: '秋',
   };
 
   return seasonMap[season.toUpperCase()] || '';
