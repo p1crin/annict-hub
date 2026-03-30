@@ -19,7 +19,7 @@ if (!supabaseUrl || !supabaseAnonKey) {
  * Public Supabase client (uses anon key)
  * Use this for client-side operations
  */
-export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
+export const supabase = createClient<Database>(supabaseUrl!, supabaseAnonKey!, {
   auth: {
     persistSession: true,
     autoRefreshToken: true,
@@ -39,7 +39,7 @@ export function getServiceRoleClient() {
     throw new Error('Missing SUPABASE_SERVICE_ROLE_KEY environment variable');
   }
 
-  return createClient<Database>(supabaseUrl, serviceRoleKey, {
+  return createClient<Database>(supabaseUrl!, serviceRoleKey, {
     auth: {
       persistSession: false,
       autoRefreshToken: false,

@@ -65,7 +65,7 @@ export default function AnimeCard({
       {/* Image */}
       <div className="relative w-full aspect-[3/4] bg-gradient-to-br from-lavender-light to-peach-light">
         <Image
-          src={anime.imageUrl}
+          src={anime.imageUrl || '/placeholder-anime.png'}
           alt={anime.title}
           fill
           className="object-cover"

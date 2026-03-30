@@ -38,7 +38,7 @@ export async function upsertUser(user: UserInsert): Promise<UserRow | null> {
 
   const { data, error } = await client
     .from('users')
-    .upsert(user, {
+    .upsert(user as any, {
       onConflict: 'annict_id',
     })
     .select()
@@ -49,7 +49,7 @@ export async function upsertUser(user: UserInsert): Promise<UserRow | null> {
     return null;
   }
 
-  return data;
+  return data as unknown as UserRow;
 }
 
 // ========================================
@@ -100,7 +100,7 @@ export async function upsertAnimeCache(
 
   const { data, error } = await client
     .from('anime_cache')
-    .upsert(anime, {
+    .upsert(anime as any, {
       onConflict: 'annict_work_id',
     })
     .select()
@@ -111,7 +111,7 @@ export async function upsertAnimeCache(
     return null;
   }
 
-  return data;
+  return data as unknown as AnimeCacheRow;
 }
 
 export async function bulkUpsertAnimeCache(
@@ -121,7 +121,7 @@ export async function bulkUpsertAnimeCache(
 
   const { data, error } = await client
     .from('anime_cache')
-    .upsert(animes, {
+    .upsert(animes as any, {
       onConflict: 'annict_work_id',
     })
     .select();
@@ -131,7 +131,7 @@ export async function bulkUpsertAnimeCache(
     return [];
   }
 
-  return data || [];
+  return (data as unknown as AnimeCacheRow[]) || [];
 }
 
 // ========================================
@@ -163,7 +163,7 @@ export async function upsertThemeSong(
 
   const { data, error } = await client
     .from('theme_songs')
-    .upsert(theme, {
+    .upsert(theme as any, {
       onConflict: 'anime_cache_id,type,sequence',
     })
     .select()
@@ -174,7 +174,7 @@ export async function upsertThemeSong(
     return null;
   }
 
-  return data;
+  return data as unknown as ThemeSongRow;
 }
 
 export async function bulkUpsertThemeSongs(
@@ -184,7 +184,7 @@ export async function bulkUpsertThemeSongs(
 
   const { data, error } = await client
     .from('theme_songs')
-    .upsert(themes, {
+    .upsert(themes as any, {
       onConflict: 'anime_cache_id,type,sequence',
     })
     .select();
@@ -194,7 +194,7 @@ export async function bulkUpsertThemeSongs(
     return [];
   }
 
-  return data || [];
+  return (data as unknown as ThemeSongRow[]) || [];
 }
 
 // ========================================
@@ -248,7 +248,7 @@ export async function upsertSpotifyMatch(
 
   const { data, error } = await client
     .from('spotify_matches')
-    .upsert(match, {
+    .upsert(match as any, {
       onConflict: 'theme_song_id,spotify_track_id',
     })
     .select()
@@ -259,7 +259,7 @@ export async function upsertSpotifyMatch(
     return null;
   }
 
-  return data;
+  return data as unknown as SpotifyMatchRow;
 }
 
 export async function bulkUpsertSpotifyMatches(
@@ -269,7 +269,7 @@ export async function bulkUpsertSpotifyMatches(
 
   const { data, error } = await client
     .from('spotify_matches')
-    .upsert(matches, {
+    .upsert(matches as any, {
       onConflict: 'theme_song_id,spotify_track_id',
     })
     .select();
@@ -279,7 +279,7 @@ export async function bulkUpsertSpotifyMatches(
     return [];
   }
 
-  return data || [];
+  return (data as unknown as SpotifyMatchRow[]) || [];
 }
 
 // ========================================
@@ -332,9 +332,9 @@ export async function getCacheStatistics() {
     .from('spotify_matches')
     .select('score');
 
-  const scores = avgScoreResult.data?.map((m) => Number(m.score)) || [];
+  const scores = (avgScoreResult.data as any)?.map((m: any) => Number(m.score)) || [];
   const avgScore = scores.length > 0
-    ? scores.reduce((a, b) => a + b, 0) / scores.length
+    ? scores.reduce((a: number, b: number) => a + b, 0) / scores.length
     : 0;
 
   return {

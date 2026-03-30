@@ -22,9 +22,11 @@ interface SearchRequest {
 /**
  * Convert ThemeSongData to AnimeThemesThemeWithDetails
  * This adapter transforms our internal format to the format expected by the matching function
+ * Note: Only populates fields actually used by the matching function (songTitle, artistNames, type)
  */
 function adaptThemeSongData(theme: ThemeSongData): AnimeThemesThemeWithDetails {
-  return {
+  // Create a minimal object with only the fields used by createSearchQuery
+  const adapted = {
     id: parseInt(theme.id, 10) || 0,
     type: theme.type,
     sequence: theme.sequence,
@@ -40,7 +42,24 @@ function adaptThemeSongData(theme: ThemeSongData): AnimeThemesThemeWithDetails {
         slug: theme.artist.toLowerCase().replace(/\s+/g, '-')
       }] : undefined
     } : undefined,
+    bestVideo: theme.videoUrl ? {
+      id: 0,
+      basename: '',
+      filename: '',
+      path: '',
+      size: 0,
+      resolution: 720,
+      nc: false,
+      subbed: false,
+      lyrics: false,
+      uncen: false,
+      link: theme.videoUrl,
+    } : undefined,
+    episodeRange: theme.episodes,
   };
+
+  // Type assertion is safe here because we only use songTitle, artistNames, and type in the matcher
+  return adapted as AnimeThemesThemeWithDetails;
 }
 
 export async function POST(request: NextRequest) {

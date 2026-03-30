@@ -4,6 +4,7 @@
 
 import type { AnnictStatus, AnnictSeasonName } from './annict';
 import type { AnimeCacheRow, ThemeSongRow, SpotifyMatchRow } from './supabase';
+import type { SpotifyTrack } from './spotify';
 
 // ========================================
 // Anime Display Types
@@ -17,6 +18,7 @@ export interface AnimeCardData {
   imageUrl?: string;
   seasonYear?: number;
   seasonName?: string;
+  malAnimeId?: number;
   status?: AnnictStatus;
   episodesCount?: number;
   watchersCount?: number;
@@ -59,6 +61,13 @@ export interface SpotifyMatchData {
   verified: boolean;
 }
 
+export interface SpotifyMatchResult {
+  theme: ThemeSongData;
+  spotifyTrack: SpotifyTrack | null;
+  score?: number;
+  confidence: 'high' | 'medium' | 'low';
+}
+
 // ========================================
 // Filter & Search Types
 // ========================================
@@ -70,7 +79,7 @@ export interface AnimeFilterOptions {
   seasonName?: AnnictSeasonName;
   minWatchersCount?: number;
   hasThemes?: boolean;
-  sortBy?: AnimeSort Field;
+  sortBy?: AnimeSortField;
   sortDirection?: 'asc' | 'desc';
 }
 

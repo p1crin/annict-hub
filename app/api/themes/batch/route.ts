@@ -9,6 +9,7 @@ import { batchMatchAnime } from '@/lib/matching/anime-matcher';
 import { supabase } from '@/lib/db/supabase';
 import type { AnnictWork } from '@/types/annict';
 import type { ThemeSongData } from '@/types/app';
+import type { AnimeCacheRow, ThemeSongRow } from '@/types/supabase';
 
 export const dynamic = 'force-dynamic';
 
@@ -47,38 +48,58 @@ export async function POST(request: NextRequest) {
 
     console.log(`Processing batch themes for ${anime.length} anime`);
 
+    // Fetch anime from cache to get their IDs
+    const { data: animeCacheData }: { data: AnimeCacheRow[] | null } = await supabase
+      .from('anime_cache')
+      .select('*')
+      .in('annict_work_id', anime.map(a => a.annictWorkId)) as { data: AnimeCacheRow[] | null };
+
+    const animeCacheMap = new Map(
+      animeCacheData?.map(cache => [cache.annict_work_id, cache]) || []
+    );
+
     // Convert to AnnictWork format for matching
-    const works: AnnictWork[] = anime.map((a) => ({
-      annictId: a.annictWorkId,
-      title: a.title,
-      titleEn: a.titleEn,
-      malAnimeId: a.malAnimeId,
-      seasonYear: a.seasonYear,
-    }));
+    const works: AnnictWork[] = anime
+      .filter(a => animeCacheMap.has(a.annictWorkId))
+      .map((a) => {
+        const cache = animeCacheMap.get(a.annictWorkId)!;
+        return {
+          id: cache.id,
+          annictId: a.annictWorkId,
+          title: a.title,
+          titleEn: a.titleEn,
+          malAnimeId: a.malAnimeId,
+          seasonYear: a.seasonYear,
+        };
+      });
 
     // Check cache first (unless force refresh)
     const cachedThemes: Record<number, ThemeSongData[]> = {};
 
     if (!forceRefresh) {
       for (const work of works) {
+        const cache = animeCacheMap.get(work.annictId)!;
         const { data: cached } = await supabase
           .from('theme_songs')
           .select('*')
-          .eq('annict_work_id', work.annictId);
+          .eq('anime_cache_id', cache.id);
 
         if (cached && cached.length > 0) {
-          cachedThemes[work.annictId] = cached.map((theme) => ({
-            annictWorkId: theme.annict_work_id,
+          const typedCache = cached as ThemeSongRow[];
+          cachedThemes[work.annictId] = typedCache.map((theme) => ({
+            id: theme.id,
+            annictWorkId: work.annictId,
             type: theme.type as 'OP' | 'ED',
             sequence: theme.sequence,
             title: theme.title,
             artist: theme.artist || undefined,
+            episodes: theme.episodes || undefined,
             videoUrl: theme.video_url || undefined,
-            audioUrl: theme.audio_url || undefined,
+            audioUrl: undefined,
             source: theme.source as 'animethemes' | 'jikan' | 'manual',
-            confidence: theme.confidence as 'high' | 'medium' | 'low' | undefined,
-            animethemesAnimeId: theme.animethemes_anime_id || undefined,
-            animethemesThemeId: theme.animethemes_theme_id || undefined,
+            confidence: undefined,
+            animethemesAnimeId: undefined,
+            animethemesThemeId: theme.animethemes_id || undefined,
           }));
         }
       }
@@ -97,50 +118,54 @@ export async function POST(request: NextRequest) {
     let matchResults: Record<number, ThemeSongData[]> = {};
 
     if (worksToMatch.length > 0) {
-      const results = await batchMatchAnime(worksToMatch, {
-        parallel: true,
-        onProgress: (progress) => {
+      const results = await batchMatchAnime(
+        worksToMatch,
+        (current, total, currentAnime) => {
           console.log(
-            `Theme matching progress: ${progress.processed}/${progress.total}`
+            `Theme matching progress: ${current}/${total}${currentAnime ? ` - ${currentAnime}` : ''}`
           );
-        },
-      });
+        }
+      );
 
       // Convert match results to ThemeSongData and cache
-      for (const result of results) {
+      for (const [annictId, result] of results.entries()) {
         if (result.success && result.themes) {
+          const cache = animeCacheMap.get(annictId)!;
           const themes: ThemeSongData[] = result.themes.map((theme) => ({
-            annictWorkId: result.annictWorkId,
+            id: `${annictId}-${theme.type}${theme.sequence}`,
+            annictWorkId: annictId,
             type: theme.type,
             sequence: theme.sequence,
-            title: theme.song || `${theme.type}${theme.sequence}`,
-            artist: theme.artist,
-            videoUrl: theme.video?.url,
-            audioUrl: theme.audio?.url,
-            source: theme.source || 'animethemes',
-            confidence: theme.confidence,
+            title: theme.songTitle || theme.song?.title || `${theme.type}${theme.sequence}`,
+            artist: theme.artistNames,
+            episodes: theme.episodeRange,
+            videoUrl: theme.bestVideo?.link,
+            audioUrl: theme.bestVideo?.audio?.link,
+            source: 'animethemes' as const,
+            confidence: undefined,
             animethemesAnimeId: result.animethemesAnimeId,
             animethemesThemeId: theme.id,
           }));
 
-          matchResults[result.annictWorkId] = themes;
+          matchResults[annictId] = themes;
 
           // Cache in Supabase
           const themeRecords = themes.map((theme) => ({
-            annict_work_id: theme.annictWorkId,
+            anime_cache_id: cache.id,
             type: theme.type,
             sequence: theme.sequence,
             title: theme.title,
             artist: theme.artist,
+            episodes: theme.episodes,
+            animethemes_id: theme.animethemesThemeId,
+            animethemes_slug: `${theme.type}${theme.sequence}`,
             video_url: theme.videoUrl,
-            audio_url: theme.audioUrl,
+            video_resolution: undefined,
             source: theme.source,
-            confidence: theme.confidence,
-            animethemes_anime_id: theme.animethemesAnimeId,
-            animethemes_theme_id: theme.animethemesThemeId,
+            synced_at: new Date().toISOString(),
           }));
 
-          await supabase.from('theme_songs').upsert(themeRecords);
+          await supabase.from('theme_songs').upsert(themeRecords as any);
         }
       }
     }

@@ -10,6 +10,8 @@ import type {
 } from '@/types/animethemes';
 
 export interface AnimeMatchResult {
+  success: boolean;
+  animethemesAnimeId: number | undefined;
   annictWorkId: number;
   matched: boolean;
   animeThemesId?: number;
@@ -33,6 +35,8 @@ export async function matchAnime(work: AnnictWork): Promise<AnimeMatchResult> {
 
     if (result.matched && result.anime) {
       return {
+        success: true,
+        animethemesAnimeId: result.anime.id,
         annictWorkId: work.annictId,
         matched: true,
         animeThemesId: result.anime.id,
@@ -43,6 +47,8 @@ export async function matchAnime(work: AnnictWork): Promise<AnimeMatchResult> {
     }
 
     return {
+      success: false,
+      animethemesAnimeId: undefined,
       annictWorkId: work.annictId,
       matched: false,
       error: result.error || 'No match found',
@@ -53,6 +59,8 @@ export async function matchAnime(work: AnnictWork): Promise<AnimeMatchResult> {
       error.message
     );
     return {
+      success: false,
+      animethemesAnimeId: undefined,
       annictWorkId: work.annictId,
       matched: false,
       error: error.message,

@@ -8,8 +8,8 @@ import { getSession } from '@/lib/auth/session';
 import { matchAnime } from '@/lib/matching/anime-matcher';
 import { supabase } from '@/lib/db/supabase';
 import type { ThemeSongData } from '@/types/app';
-import type { ThemeSongRow } from '@/types/supabase';
-
+import type { AnimeCacheRow, ThemeSongInsert, ThemeSongRow } from '@/types/supabase';
+import type { AnimeThemesThemeWithDetails } from '@/types/animethemes';
 export const dynamic = 'force-dynamic';
 
 interface RouteContext {
@@ -47,11 +47,11 @@ export async function GET(
     console.log(`Fetching themes for anime ${annictWorkId}`);
 
     // Fetch anime info from cache first (needed for anime_cache_id)
-    const { data: animeCache } = await supabase
+    const { data: animeCache }: { data: AnimeCacheRow | null } = await supabase
       .from('anime_cache')
       .select('*')
       .eq('annict_work_id', annictWorkId)
-      .maybeSingle();
+      .maybeSingle() as { data: AnimeCacheRow | null };
 
     // Check theme cache if anime exists and not forcing refresh
     if (animeCache && !forceRefresh) {
@@ -97,6 +97,7 @@ export async function GET(
 
     // Match themes
     const work = {
+      id: animeCache.id,
       annictId: animeCache.annict_work_id,
       title: animeCache.title,
       titleEn: animeCache.title_en || undefined,
@@ -115,17 +116,17 @@ export async function GET(
     }
 
     // Convert to ThemeSongData
-    const themes: ThemeSongData[] = result.themes.map((theme, index) => ({
+    const themes: ThemeSongData[] = result.themes.map((theme: AnimeThemesThemeWithDetails) => ({
       id: `${annictWorkId}-${theme.type}${theme.sequence}`,
       annictWorkId: result.annictWorkId,
       type: theme.type,
       sequence: theme.sequence,
-      title: theme.song || `${theme.type}${theme.sequence}`,
-      artist: theme.artist,
-      videoUrl: theme.video?.url,
-      audioUrl: theme.audio?.url,
-      source: theme.source || 'animethemes',
-      confidence: theme.confidence,
+      title: theme.songTitle || theme.song?.title || `${theme.type}${theme.sequence}`,
+      artist: theme.artistNames,
+      videoUrl: theme.bestVideo?.link,
+      audioUrl: theme.bestVideo?.audio?.link,
+      source: 'animethemes' as const,
+      confidence: undefined,
       animethemesAnimeId: result.animethemesAnimeId,
       animethemesThemeId: theme.id,
     }));
@@ -146,7 +147,8 @@ export async function GET(
       synced_at: new Date().toISOString(),
     }));
 
-    await supabase.from('theme_songs').upsert(themeRecords);
+    // Type assertion needed due to Supabase client type inference
+    await supabase.from('theme_songs').upsert(themeRecords as any);
 
     return NextResponse.json({
       success: true,
