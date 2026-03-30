@@ -8,8 +8,11 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { motion } from 'framer-motion';
+import { arrayMove } from '@dnd-kit/sortable';
+import type { DragEndEvent } from '@dnd-kit/core';
 import AnimeGrid from '@/components/anime/AnimeGrid';
 import AnimeFilters from '@/components/anime/AnimeFilters';
+import AnimeDetailModal from '@/components/anime/AnimeDetailModal';
 import Button from '@/components/shared/Button';
 import Loading from '@/components/shared/Loading';
 import type { AppSession, AnimeCardData } from '@/types/app';
@@ -33,6 +36,15 @@ export default function DashboardClient({ session }: DashboardClientProps) {
   const [selectedStatus, setSelectedStatus] = useState<AnnictStatus | 'ALL'>('ALL');
   const [selectedSeason, setSelectedSeason] = useState<string | 'ALL'>('ALL');
 
+  // Sort mode state
+  const [isSortMode, setIsSortMode] = useState(false);
+  const [customOrder, setCustomOrder] = useState<number[]>([]);
+
+  // Modal state
+  const [showDetailModal, setShowDetailModal] = useState(false);
+  const [selectedAnimeForDetail, setSelectedAnimeForDetail] =
+    useState<AnimeCardData | null>(null);
+
   // Legacy state (not used with fetchAllAnime)
   const [hasMore, setHasMore] = useState(false);
   const [endCursor, setEndCursor] = useState<string | null>(null);
@@ -42,6 +54,30 @@ export default function DashboardClient({ session }: DashboardClientProps) {
   useEffect(() => {
     fetchAllAnime();
   }, []);
+
+  // Load custom order from sessionStorage
+  useEffect(() => {
+    const savedOrder = sessionStorage.getItem(
+      `anime-custom-order-${session.user.annictId}`
+    );
+    if (savedOrder) {
+      try {
+        setCustomOrder(JSON.parse(savedOrder));
+      } catch (error) {
+        console.error('Error loading custom order:', error);
+      }
+    }
+  }, [session.user.annictId]);
+
+  // Save custom order to sessionStorage
+  useEffect(() => {
+    if (customOrder.length > 0) {
+      sessionStorage.setItem(
+        `anime-custom-order-${session.user.annictId}`,
+        JSON.stringify(customOrder)
+      );
+    }
+  }, [customOrder, session.user.annictId]);
 
   // Check for Spotify connection status
   useEffect(() => {
@@ -223,6 +259,61 @@ export default function DashboardClient({ session }: DashboardClientProps) {
     }
   };
 
+  /**
+   * Handle drag end for sorting
+   */
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+
+    if (!over || active.id === over.id) {
+      return;
+    }
+
+    const oldIndex = sortedAnime.findIndex(
+      (item) => item.annictWorkId === active.id
+    );
+    const newIndex = sortedAnime.findIndex(
+      (item) => item.annictWorkId === over.id
+    );
+
+    if (oldIndex !== -1 && newIndex !== -1) {
+      const newOrder = arrayMove(sortedAnime, oldIndex, newIndex);
+      setCustomOrder(newOrder.map((item) => item.annictWorkId));
+    }
+  };
+
+  /**
+   * Toggle sort mode
+   */
+  const handleToggleSortMode = () => {
+    setIsSortMode((prev) => !prev);
+  };
+
+  /**
+   * Reset custom order
+   */
+  const handleResetOrder = () => {
+    setCustomOrder([]);
+    sessionStorage.removeItem(`anime-custom-order-${session.user.annictId}`);
+  };
+
+  /**
+   * Handle anime click to open detail modal
+   */
+  const handleAnimeClick = (anime: AnimeCardData) => {
+    if (isSortMode) return; // Don't open modal in sort mode
+    setSelectedAnimeForDetail(anime);
+    setShowDetailModal(true);
+  };
+
+  /**
+   * Close detail modal
+   */
+  const handleCloseModal = () => {
+    setShowDetailModal(false);
+    setSelectedAnimeForDetail(null);
+  };
+
   // Filter anime
   const filteredAnime = useMemo(() => {
     // Defensive check: ensure anime is an array
@@ -275,6 +366,33 @@ export default function DashboardClient({ session }: DashboardClientProps) {
     });
     return Array.from(seasons).sort().reverse();
   }, [anime]);
+
+  // Sort filtered anime by custom order
+  const sortedAnime = useMemo(() => {
+    if (customOrder.length === 0) {
+      return filteredAnime;
+    }
+
+    // Create a map for custom order
+    const orderMap = new Map(customOrder.map((id, index) => [id, index]));
+
+    // Sort by custom order, then by default order
+    return [...filteredAnime].sort((a, b) => {
+      const orderA = orderMap.get(a.annictWorkId);
+      const orderB = orderMap.get(b.annictWorkId);
+
+      if (orderA !== undefined && orderB !== undefined) {
+        return orderA - orderB;
+      }
+      if (orderA !== undefined) {
+        return -1;
+      }
+      if (orderB !== undefined) {
+        return 1;
+      }
+      return 0;
+    });
+  }, [filteredAnime, customOrder]);
 
   if (loading) {
     const loadingMessage = isCached
@@ -355,26 +473,58 @@ export default function DashboardClient({ session }: DashboardClientProps) {
             className="flex items-center justify-between mb-6 bg-white/90 backdrop-blur-sm rounded-2xl shadow-pastel p-4"
           >
             <div className="flex items-center gap-4">
-              <button
-                onClick={handleSelectAll}
-                className="text-sm text-lavender hover:text-peach font-medium transition-colors"
-              >
-                {selectedAnime.length === filteredAnime.length
-                  ? '選択を解除'
-                  : 'すべて選択'}
-              </button>
-              <p className="text-sm text-gray-600">
-                {selectedAnime.length} 件選択中
-              </p>
+              {!isSortMode ? (
+                <>
+                  <button
+                    onClick={handleSelectAll}
+                    className="text-sm text-lavender hover:text-peach font-medium transition-colors"
+                  >
+                    {selectedAnime.length === filteredAnime.length
+                      ? '選択を解除'
+                      : 'すべて選択'}
+                  </button>
+                  <p className="text-sm text-gray-600">
+                    {selectedAnime.length} 件選択中
+                  </p>
+                </>
+              ) : (
+                <p className="text-sm text-gray-600">
+                  ドラッグして並び替えてください
+                </p>
+              )}
             </div>
 
-            <Button
-              onClick={handleCreatePlaylist}
-              disabled={selectedAnime.length === 0 || !session.spotifyToken}
-              size="sm"
-            >
-              🎧 プレイリスト作成
-            </Button>
+            <div className="flex items-center gap-2">
+              {/* Sort mode toggle */}
+              <Button
+                onClick={handleToggleSortMode}
+                variant={isSortMode ? 'primary' : 'secondary'}
+                size="sm"
+              >
+                {isSortMode ? '✓ 並び替え中' : '↕️ 並び替え'}
+              </Button>
+
+              {/* Reset order button */}
+              {customOrder.length > 0 && !isSortMode && (
+                <button
+                  onClick={handleResetOrder}
+                  className="text-xs text-gray-500 hover:text-gray-700 underline transition-colors"
+                >
+                  順序をリセット
+                </button>
+              )}
+
+              {/* Create playlist button */}
+              {!isSortMode && (
+                <Button
+                  onClick={handleCreatePlaylist}
+                  disabled={selectedAnime.length === 0 || !session.spotifyToken}
+                  size="sm"
+                >
+                  🎧 プレイリスト作成
+                </Button>
+              )}
+            </div>
           </motion.div>
         )}
 
@@ -393,11 +543,14 @@ export default function DashboardClient({ session }: DashboardClientProps) {
 
         {/* Anime grid */}
         <AnimeGrid
-          anime={filteredAnime}
+          anime={sortedAnime}
           loading={false}
           hasMore={false}
           selectedAnime={selectedAnime}
           onToggleSelect={handleToggleSelect}
+          onAnimeClick={handleAnimeClick}
+          isSortMode={isSortMode}
+          onDragEnd={handleDragEnd}
         />
 
         {/* Load more button */}
@@ -430,6 +583,15 @@ export default function DashboardClient({ session }: DashboardClientProps) {
         )}
 
       </main>
+
+      {/* Detail Modal */}
+      <AnimeDetailModal
+        anime={selectedAnimeForDetail}
+        isOpen={showDetailModal}
+        onClose={handleCloseModal}
+        selectedAnime={selectedAnime}
+        onToggleSelect={handleToggleSelect}
+      />
     </div>
   );
 }
