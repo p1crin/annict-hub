@@ -10,12 +10,37 @@ import { updateSession } from '@/lib/auth/session';
 import { spotifyClient } from '@/lib/api/spotify';
 import { batchMatchThemesToSpotify } from '@/lib/matching/spotify-scorer';
 import type { ThemeSongData } from '@/types/app';
+import type { AnimeThemesThemeWithDetails } from '@/types/animethemes';
 
 export const dynamic = 'force-dynamic';
 
 interface SearchRequest {
   themes: ThemeSongData[];
   animeTitle?: string;
+}
+
+/**
+ * Convert ThemeSongData to AnimeThemesThemeWithDetails
+ * This adapter transforms our internal format to the format expected by the matching function
+ */
+function adaptThemeSongData(theme: ThemeSongData): AnimeThemesThemeWithDetails {
+  return {
+    id: parseInt(theme.id, 10) || 0,
+    type: theme.type,
+    sequence: theme.sequence,
+    slug: `${theme.type}${theme.sequence}`,
+    songTitle: theme.title,
+    artistNames: theme.artist,
+    song: theme.title ? {
+      id: 0,
+      title: theme.title,
+      artists: theme.artist ? [{
+        id: 0,
+        name: theme.artist,
+        slug: theme.artist.toLowerCase().replace(/\s+/g, '-')
+      }] : undefined
+    } : undefined,
+  };
 }
 
 export async function POST(request: NextRequest) {
@@ -84,29 +109,40 @@ export async function POST(request: NextRequest) {
     console.log(`Searching Spotify for ${themes.length} themes`);
 
     // Match themes with Spotify tracks
+    // Transform themes to include animeTitle for each theme
+    const themesWithAnimeTitle = themes.map(theme => ({
+      theme: adaptThemeSongData(theme),
+      animeTitle: animeTitle || ''
+    }));
+
     const matches = await batchMatchThemesToSpotify(
+      themesWithAnimeTitle,
       accessToken,
-      themes,
-      animeTitle,
-      (progress) => {
+      {},
+      (current, total, currentTheme) => {
         console.log(
-          `Spotify matching progress: ${progress.processed}/${progress.total}`
+          `Spotify matching progress: ${current}/${total}${currentTheme ? ` - ${currentTheme}` : ''}`
         );
       }
     );
 
     // Calculate statistics
-    const highConfidence = matches.filter((m) => m.confidence === 'high').length;
-    const mediumConfidence = matches.filter((m) => m.confidence === 'medium').length;
-    const lowConfidence = matches.filter((m) => m.confidence === 'low').length;
-    const unmatched = matches.filter((m) => !m.spotifyTrack).length;
+    // Convert Map to array of values for processing
+    const matchesArray = Array.from(matches.values());
+    const highConfidence = matchesArray.filter((m) => m.bestMatch?.confidence === 'high').length;
+    const mediumConfidence = matchesArray.filter((m) => m.bestMatch?.confidence === 'medium').length;
+    const lowConfidence = matchesArray.filter((m) => m.bestMatch?.confidence === 'low').length;
+    const unmatched = matchesArray.filter((m) => m.status === 'no_match').length;
+
+    // Convert Map to object for JSON response
+    const matchesObject = Object.fromEntries(matches);
 
     return NextResponse.json({
       success: true,
-      matches,
+      matches: matchesObject,
       stats: {
         total: themes.length,
-        matched: matches.length - unmatched,
+        matched: matchesArray.length - unmatched,
         unmatched,
         highConfidence,
         mediumConfidence,

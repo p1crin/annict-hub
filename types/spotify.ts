@@ -306,10 +306,10 @@ export interface SpotifySearchQuery {
 }
 
 export interface SpotifyMatchingOptions {
-  minScore: number; // Minimum score to consider a match (0-100)
-  maxResults: number; // Maximum number of candidates to return
-  preferExactArtist: boolean;
-  preferPopular: boolean;
+  minScore?: number; // Minimum score to consider a match (0-100)
+  maxResults?: number; // Maximum number of candidates to return
+  preferExactArtist?: boolean;
+  preferPopular?: boolean;
   market?: string; // e.g., 'JP' for Japan
 }
 

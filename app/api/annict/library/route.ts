@@ -51,16 +51,17 @@ export async function GET(request: NextRequest) {
         .limit(limitParam ? parseInt(limitParam, 10) : 1000);
 
       if (!cacheError && cachedAnime && cachedAnime.length > 0) {
+        const typedCache = cachedAnime as AnimeCacheRow[];
         // Check if cache is fresh (less than 1 hour old)
-        const latestSync = new Date(cachedAnime[0].synced_at);
+        const latestSync = new Date(typedCache[0].synced_at);
         const cacheAge = Date.now() - latestSync.getTime();
         const oneHour = 60 * 60 * 1000;
 
         if (cacheAge < oneHour) {
-          console.log(`Using cached data (${cachedAnime.length} items, ${Math.round(cacheAge / 1000 / 60)} minutes old)`);
+          console.log(`Using cached data (${typedCache.length} items, ${Math.round(cacheAge / 1000 / 60)} minutes old)`);
 
           // Convert cached data to AnimeCardData
-          const animeData: AnimeCardData[] = cachedAnime.map((anime: any) => ({
+          const animeData: AnimeCardData[] = typedCache.map((anime) => ({
             id: `${anime.annict_work_id}`,
             annictWorkId: anime.annict_work_id,
             title: anime.title,
