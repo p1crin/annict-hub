@@ -43,11 +43,12 @@ export async function GET(request: NextRequest) {
     const useCache = searchParams.get('cache') !== 'false'; // Default to true
 
     // If using cache, try to get from Supabase first (only on initial load)
-    // Always get all cached data (ignore limit parameter for cache)
+    // Always get all cached data for this user (ignore limit parameter for cache)
     if (useCache && !forceRefresh && !afterCursor) {
       const { data: cachedAnime, error: cacheError } = await supabase
         .from('anime_cache')
         .select('*')
+        .eq('annict_user_id', session.user.annictId)
         .order('synced_at', { ascending: false });
 
       if (!cacheError && cachedAnime && cachedAnime.length > 0) {
@@ -123,12 +124,13 @@ export async function GET(request: NextRequest) {
     for (const entry of libraryEntries) {
       const work = entry.work;
 
-      // Check cache first (unless force refresh)
+      // Check cache first (unless force refresh) for this user
       let cachedAnime: AnimeCacheRow | null = null;
       if (!forceRefresh) {
         const { data } = await supabase
           .from('anime_cache')
           .select('*')
+          .eq('annict_user_id', session.user.annictId)
           .eq('annict_work_id', work.annictId)
           .maybeSingle();
 
@@ -162,6 +164,7 @@ export async function GET(request: NextRequest) {
 
       // Prepare cache data for batch upsert
       const cacheData: AnimeCacheInsert = {
+        annict_user_id: session.user.annictId,
         annict_work_id: work.annictId,
         title: work.title,
         title_en: work.titleEn,
@@ -196,7 +199,7 @@ export async function GET(request: NextRequest) {
       const serviceClient = getServiceRoleClient();
       const { error: batchCacheError } = await serviceClient
         .from('anime_cache')
-        .upsert(cacheDataBatch as any, { onConflict: 'annict_work_id' });
+        .upsert(cacheDataBatch as any, { onConflict: 'annict_user_id,annict_work_id' });
 
       if (batchCacheError) {
         console.error('Error batch caching anime:', batchCacheError);

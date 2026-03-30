@@ -58,6 +58,7 @@ export interface AnimeCache {
 
 export interface AnimeCacheRow {
   id: string; // UUID
+  annict_user_id: number; // Annict user ID for cache separation
   annict_work_id: number;
   title: string;
   title_en?: string;

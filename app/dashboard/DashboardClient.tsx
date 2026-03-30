@@ -26,15 +26,17 @@ export default function DashboardClient({ session }: DashboardClientProps) {
   // State
   const [anime, setAnime] = useState<AnimeCardData[]>([]);
   const [loading, setLoading] = useState(true);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [hasMore, setHasMore] = useState(false);
-  const [endCursor, setEndCursor] = useState<string | null>(null);
+  const [isCached, setIsCached] = useState(false);
+  const [isBackgroundSyncing, setIsBackgroundSyncing] = useState(false);
   const [selectedAnime, setSelectedAnime] = useState<number[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedStatus, setSelectedStatus] = useState<AnnictStatus | 'ALL'>('ALL');
   const [selectedSeason, setSelectedSeason] = useState<string | 'ALL'>('ALL');
-  const [isCached, setIsCached] = useState(false);
-  const [isBackgroundSyncing, setIsBackgroundSyncing] = useState(false);
+
+  // Legacy state (not used with fetchAllAnime)
+  const [hasMore, setHasMore] = useState(false);
+  const [endCursor, setEndCursor] = useState<string | null>(null);
+  const loadingMore = false; // 全件取得するため、追加読み込みはなし
 
   // Fetch anime library on mount
   useEffect(() => {
@@ -63,161 +65,101 @@ export default function DashboardClient({ session }: DashboardClientProps) {
 
   const fetchAllAnime = async () => {
     setLoading(true);
+    setIsCached(false);
 
     try {
       let cursor: string | null = null;
-      let allAnime: AnimeCardData[] = [];
+      const animeMap = new Map<number, AnimeCardData>(); // 最初から Map を使用
       let page = 1;
 
-      while (true) {
-        const params = new URLSearchParams();
-        params.set('limit', '50');
+      // 1ページ目: キャッシュを試す
+      console.log('📥 Fetching page 1 (trying cache)...');
+      const firstParams = new URLSearchParams();
+      firstParams.set('limit', '50');
 
-        if (cursor) {
-          params.set('after', cursor);
-          params.set('cache', 'false');
-        }
+      const firstRes = await fetch(`/api/annict/library?${firstParams}`);
+      if (!firstRes.ok) {
+        throw new Error(`API error: ${firstRes.status}`);
+      }
 
-        console.log(`📥 Fetching page ${page}... cursor=${cursor}`);
+      const firstData = await firstRes.json();
+      const firstFetched: AnimeCardData[] = firstData.data || [];
 
-        const res = await fetch(`/api/annict/library?${params}`);
+      console.log(`Fetched ${firstFetched.length} anime (cached: ${firstData.cached}, hasMore: ${firstData.hasMore})`);
 
-        if (!res.ok) {
-          throw new Error(`API error: ${res.status}`);
-        }
+      // 重複排除しながら追加
+      firstFetched.forEach((anime) => {
+        animeMap.set(anime.annictWorkId, anime);
+      });
 
-        const data = await res.json();
+      // UI更新
+      setAnime(Array.from(animeMap.values()));
+      setIsCached(firstData.cached || false);
 
-        const fetched: AnimeCardData[] = data.data || [];
-
-        console.log(`Fetched ${fetched.length} anime`);
-
-        // 重複排除
-        const map = new Map<number, AnimeCardData>();
-
-        [...allAnime, ...fetched].forEach((anime) => {
-          map.set(anime.annictWorkId, anime);
-        });
-
-        allAnime = Array.from(map.values());
-
-        // UI更新（途中経過）
-        setAnime([...allAnime]);
-
-        if (!data.hasMore) {
-          console.log("✅ Finished fetching all anime");
-          break;
-        }
-
-        cursor = data.endCursor;
+      // 続きがあれば取得
+      if (firstData.hasMore) {
+        cursor = firstData.endCursor;
         page++;
+        setIsBackgroundSyncing(true);
 
-        // Annict rate limit対策
-        await new Promise((r) => setTimeout(r, 300));
+        while (cursor) {
+          const params = new URLSearchParams();
+          params.set('limit', '50');
+          params.set('after', cursor);
+          params.set('cache', 'false'); // 2ページ目以降はキャッシュなし
+
+          console.log(`📥 Fetching page ${page}... cursor=${cursor}`);
+
+          const res = await fetch(`/api/annict/library?${params}`);
+          if (!res.ok) {
+            throw new Error(`API error: ${res.status}`);
+          }
+
+          const data = await res.json();
+          const fetched: AnimeCardData[] = data.data || [];
+
+          console.log(`Fetched ${fetched.length} anime (hasMore: ${data.hasMore})`);
+
+          // 重複排除しながら追加
+          fetched.forEach((anime) => {
+            animeMap.set(anime.annictWorkId, anime);
+          });
+
+          // UI更新
+          setAnime(Array.from(animeMap.values()));
+
+          if (!data.hasMore) {
+            console.log('✅ Finished fetching all anime');
+            break;
+          }
+
+          cursor = data.endCursor;
+          page++;
+
+          // Annict rate limit対策
+          await new Promise((r) => setTimeout(r, 300));
+        }
       }
 
       setHasMore(false);
       setEndCursor(null);
+      setIsBackgroundSyncing(false);
 
-      console.log(`🎉 Total anime: ${allAnime.length}`);
+      console.log(`🎉 Total anime: ${animeMap.size} (unique)`);
     } catch (err) {
-      console.error("Error fetching anime:", err);
+      console.error('Error fetching anime:', err);
+      alert(`エラー: ${err instanceof Error ? err.message : 'アニメライブラリの取得に失敗しました'}`);
     } finally {
       setLoading(false);
+      setIsBackgroundSyncing(false);
     }
   };
   /**
-   * Fetch anime library from API
-   */
-  const fetchAnimeLibrary = async (isInitial = false) => {
-    if (isInitial) {
-      setLoading(true);
-    } else {
-      setLoadingMore(true);
-    }
-
-    try {
-      // Build query parameters
-      const params = new URLSearchParams();
-
-      if (isInitial) {
-        // Initial load: try to use cache (no limit to get all cached data)
-        // If no cache, fetch 50 from Annict
-        params.set('limit', '50');
-      } else {
-        // Background pagination: always fetch from Annict
-        params.set('cache', 'false');
-        params.set('limit', '50');
-        if (endCursor) {
-          params.set('after', endCursor);
-        }
-      }
-
-      const response = await fetch(`/api/annict/library?${params}`);
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        console.error('API Error Response:', errorData);
-        throw new Error(errorData.error || `Failed to fetch library (${response.status})`);
-      }
-
-      const data = await response.json();
-
-      if (isInitial) {
-        setAnime(data.data || []);
-        setIsCached(data.cached || false);
-      } else {
-        setAnime(prev => [...prev, ...(data.data || [])]);
-      }
-
-      setHasMore(data.hasMore || false);
-      setEndCursor(data.endCursor || null);
-
-      console.log(`Fetched ${data.data?.length || 0} anime (cached: ${data.cached}, hasMore: ${data.hasMore}, endCursor: ${data.endCursor})`);
-      console.log(`Total anime now: ${isInitial ? (data.data?.length || 0) : (anime.length + (data.data?.length || 0))}`);
-
-      // If there are more anime to fetch, trigger background sync
-      if (data.hasMore) {
-        if (isInitial) {
-          if (data.cached) {
-            console.log('🔄 Starting background sync for remaining cached anime...');
-          } else {
-            console.log('🔄 Starting background fetch for remaining anime (initial load)...');
-          }
-          setIsBackgroundSyncing(true);
-        }
-        setTimeout(() => {
-          console.log('📥 Triggering next page fetch...');
-          fetchAnimeLibrary(false);
-        }, 500);
-      } else {
-        // No more data
-        if (isBackgroundSyncing) {
-          setIsBackgroundSyncing(false);
-          console.log(`✅ Background sync completed. Total: ${anime.length + (data.data?.length || 0)} anime`);
-        }
-      }
-    } catch (error) {
-      console.error('Error fetching library:', error);
-      // Show error message to user
-      if (isInitial) {
-        alert(`エラー: ${error instanceof Error ? error.message : 'アニメライブラリの取得に失敗しました'}`);
-      }
-    } finally {
-      if (isInitial) {
-        setLoading(false);
-      } else {
-        setLoadingMore(false);
-      }
-    }
-  };
-
-  /**
-   * Load more anime
+   * Load more anime (not used anymore - fetchAllAnime gets all data)
    */
   const handleLoadMore = () => {
-    if (!loadingMore && hasMore) {
-      fetchAnimeLibrary(false);
-    }
+    // 全件取得するため、この関数は不要
+    console.log('Load more is not needed - all anime already fetched');
   };
 
   /**
