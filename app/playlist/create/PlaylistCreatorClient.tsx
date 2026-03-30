@@ -9,13 +9,12 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import ProgressSteps, { Step } from '@/components/playlist/ProgressSteps';
-import ThemeSongList from '@/components/playlist/ThemeSongList';
 import Button from '@/components/shared/Button';
 import Loading from '@/components/shared/Loading';
 import type { AppSession, AnimeCardData, ThemeSongData, SpotifyMatchResult } from '@/types/app';
 
 interface PlaylistCreatorClientProps {
-  session: AppSession;
+  session: AppSession; // eslint-disable-line @typescript-eslint/no-unused-vars
 }
 
 type WorkflowStep = 'select' | 'fetch-themes' | 'match-spotify' | 'review' | 'create';
@@ -301,7 +300,6 @@ export default function PlaylistCreatorClient({ session }: PlaylistCreatorClient
 
           {currentStep === 'review' && !loading && (
             <StepReview
-              themes={themes}
               matches={matches}
               onProceed={handleProceedToCreate}
               onBack={() => setCurrentStep('select')}
@@ -418,12 +416,10 @@ function StepMatchingSpotify({ matches }: { matches: SpotifyMatchResult[] }) {
  * Step 4: Review
  */
 function StepReview({
-  themes,
   matches,
   onProceed,
   onBack,
 }: {
-  themes: ThemeSongData[];
   matches: SpotifyMatchResult[];
   onProceed: () => void;
   onBack: () => void;
