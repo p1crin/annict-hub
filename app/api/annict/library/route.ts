@@ -100,7 +100,10 @@ export async function GET(request: NextRequest) {
     }
 
     // Fetch from Annict (limit to 50 for initial load)
-    const states: AnnictStatus[] = statusParam ? [statusParam] : ['WATCHED'];
+    // Get all statuses except NO_STATUS (user has registered some status)
+    const states: AnnictStatus[] = statusParam
+      ? [statusParam]
+      : ['WANNA_WATCH', 'WATCHING', 'WATCHED', 'ON_HOLD', 'STOP_WATCHING'];
     const fetchLimit = limitParam ? parseInt(limitParam, 10) : 50;
 
     console.log(`Fetching ${fetchLimit} entries from Annict${afterCursor ? ' (page ' + afterCursor + ')' : ''}...`);
