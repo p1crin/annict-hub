@@ -98,7 +98,13 @@ export default function PlaylistCreatorClient({ session }: PlaylistCreatorClient
         allThemes.push(...animeThemes);
       });
 
+      console.log(`Found ${allThemes.length} themes from ${selectedAnime.length} anime`);
       setThemes(allThemes);
+      setProgress({ current: selectedAnime.length, total: selectedAnime.length, message: `${allThemes.length}曲の主題歌を取得しました` });
+
+      // Wait a moment before moving to next step
+      await new Promise(resolve => setTimeout(resolve, 800));
+
       setCurrentStep('match-spotify');
 
       // Auto-proceed to Spotify matching
@@ -117,7 +123,25 @@ export default function PlaylistCreatorClient({ session }: PlaylistCreatorClient
   const matchSpotify = async (themesToMatch: ThemeSongData[]) => {
     setLoading(true);
     setError(null);
-    setProgress({ current: 0, total: themesToMatch.length, message: 'Spotifyで検索中...' });
+
+    // Start progress simulation
+    const totalThemes = themesToMatch.length;
+    const estimatedTimePerTheme = 300; // ms per theme (search + delay)
+    const totalEstimatedTime = totalThemes * estimatedTimePerTheme;
+
+    let progressInterval: NodeJS.Timeout;
+    let currentProgress = 0;
+
+    // Simulate progress while waiting
+    progressInterval = setInterval(() => {
+      currentProgress += 1;
+      const estimatedCurrent = Math.min(currentProgress, totalThemes - 1);
+      setProgress({
+        current: estimatedCurrent,
+        total: totalThemes,
+        message: `Spotifyで検索中... (${estimatedCurrent}/${totalThemes})`
+      });
+    }, estimatedTimePerTheme);
 
     try {
       const response = await fetch('/api/spotify/search', {
@@ -125,6 +149,8 @@ export default function PlaylistCreatorClient({ session }: PlaylistCreatorClient
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ themes: themesToMatch }),
       });
+
+      clearInterval(progressInterval);
 
       if (!response.ok) {
         throw new Error('Spotify検索に失敗しました');
@@ -150,10 +176,23 @@ export default function PlaylistCreatorClient({ session }: PlaylistCreatorClient
       });
 
       console.log(`Converted ${matchesArray.length} matches`);
+
+      // Show completion
+      setProgress({
+        current: totalThemes,
+        total: totalThemes,
+        message: `検索完了！ ${matchesArray.filter(m => m.spotifyTrack).length}/${totalThemes} 曲がマッチしました`
+      });
+
       setMatches(matchesArray);
+
+      // Wait a moment before showing review
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
       setCurrentStep('review');
 
     } catch (err: any) {
+      clearInterval(progressInterval);
       setError(err.message || 'Spotify検索に失敗しました');
     } finally {
       setLoading(false);
@@ -428,43 +467,122 @@ function StepReview({
   const highConfidence = matches.filter((m) => m.confidence === 'high').length;
   const mediumConfidence = matches.filter((m) => m.confidence === 'medium').length;
   const lowConfidence = matches.filter((m) => m.confidence === 'low').length;
+  const unmatchedCount = matches.filter((m) => !m.spotifyTrack).length;
 
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -20 }}
-      className="bg-white rounded-3xl shadow-pastel p-6"
+      className="space-y-6"
     >
-      <h2 className="text-2xl font-bold text-gray-800 mb-4">マッチング結果</h2>
-
       {/* Stats */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
-        <div className="text-center p-4 bg-gradient-to-r from-lavender-light to-peach-light rounded-xl">
-          <p className="text-2xl font-bold text-gray-800">{matchedCount}</p>
-          <p className="text-xs text-gray-600">マッチ成功</p>
-        </div>
-        <div className="text-center p-4 bg-mint rounded-xl">
-          <p className="text-2xl font-bold text-gray-800">{highConfidence}</p>
-          <p className="text-xs text-gray-600">高精度</p>
-        </div>
-        <div className="text-center p-4 bg-soft-yellow rounded-xl">
-          <p className="text-2xl font-bold text-gray-800">{mediumConfidence}</p>
-          <p className="text-xs text-gray-600">中精度</p>
-        </div>
-        <div className="text-center p-4 bg-peach-light rounded-xl">
-          <p className="text-2xl font-bold text-gray-800">{lowConfidence}</p>
-          <p className="text-xs text-gray-600">低精度</p>
+      <div className="bg-white rounded-3xl shadow-pastel p-6">
+        <h2 className="text-2xl font-bold text-gray-800 mb-4">マッチング結果</h2>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+          <div className="text-center p-4 bg-gradient-to-r from-lavender-light to-peach-light rounded-xl">
+            <p className="text-2xl font-bold text-gray-800">{matchedCount}</p>
+            <p className="text-xs text-gray-600">マッチ成功</p>
+          </div>
+          <div className="text-center p-4 bg-mint rounded-xl">
+            <p className="text-2xl font-bold text-gray-800">{highConfidence}</p>
+            <p className="text-xs text-gray-600">高精度</p>
+          </div>
+          <div className="text-center p-4 bg-soft-yellow rounded-xl">
+            <p className="text-2xl font-bold text-gray-800">{mediumConfidence}</p>
+            <p className="text-xs text-gray-600">中精度</p>
+          </div>
+          <div className="text-center p-4 bg-peach-light rounded-xl">
+            <p className="text-2xl font-bold text-gray-800">{lowConfidence}</p>
+            <p className="text-xs text-gray-600">低精度</p>
+          </div>
         </div>
       </div>
 
-      <div className="flex gap-3">
-        <Button onClick={onProceed} fullWidth>
-          プレイリストを作成
-        </Button>
-        <Button onClick={onBack} variant="ghost" fullWidth>
-          戻る
-        </Button>
+      {/* Matched tracks list */}
+      {matchedCount > 0 && (
+        <div className="bg-white rounded-3xl shadow-pastel p-6">
+          <h3 className="text-lg font-bold text-gray-800 mb-4">マッチした楽曲</h3>
+          <div className="space-y-3 max-h-96 overflow-y-auto">
+            {matches.filter(m => m.spotifyTrack).map((match, index) => (
+              <motion.div
+                key={index}
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: index * 0.05 }}
+                className="flex items-center gap-3 p-3 bg-gradient-to-r from-lavender-light to-peach-light rounded-xl"
+              >
+                {/* Album cover */}
+                {match.spotifyTrack?.album.images?.[0] && (
+                  <img
+                    src={match.spotifyTrack.album.images[0].url}
+                    alt={match.spotifyTrack.album.name}
+                    className="w-12 h-12 rounded-lg object-cover"
+                  />
+                )}
+
+                {/* Track info */}
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold text-gray-800 text-sm truncate">
+                    {match.theme.title}
+                  </p>
+                  <p className="text-xs text-gray-600 truncate">
+                    → {match.spotifyTrack?.name}
+                  </p>
+                  <p className="text-xs text-gray-500 truncate">
+                    {match.spotifyTrack?.artists.map(a => a.name).join(', ')}
+                  </p>
+                </div>
+
+                {/* Confidence badge */}
+                <div className={`
+                  px-2 py-1 rounded-full text-xs font-semibold
+                  ${match.confidence === 'high' ? 'bg-mint text-white' : ''}
+                  ${match.confidence === 'medium' ? 'bg-soft-yellow text-gray-700' : ''}
+                  ${match.confidence === 'low' ? 'bg-peach-light text-gray-700' : ''}
+                `}>
+                  {match.confidence === 'high' ? '高' : match.confidence === 'medium' ? '中' : '低'}
+                </div>
+              </motion.div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Unmatched tracks */}
+      {unmatchedCount > 0 && (
+        <div className="bg-white rounded-3xl shadow-pastel p-6">
+          <h3 className="text-lg font-bold text-gray-800 mb-4">
+            マッチしなかった楽曲 ({unmatchedCount}件)
+          </h3>
+          <div className="space-y-2 max-h-60 overflow-y-auto">
+            {matches.filter(m => !m.spotifyTrack).map((match, index) => (
+              <div
+                key={index}
+                className="p-3 bg-gray-100 rounded-xl"
+              >
+                <p className="font-semibold text-gray-700 text-sm">
+                  {match.theme.title}
+                </p>
+                <p className="text-xs text-gray-500">
+                  {match.theme.artist || 'アーティスト不明'}
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Actions */}
+      <div className="bg-white rounded-3xl shadow-pastel p-6">
+        <div className="flex gap-3">
+          <Button onClick={onProceed} disabled={matchedCount === 0} fullWidth>
+            プレイリストを作成 ({matchedCount}曲)
+          </Button>
+          <Button onClick={onBack} variant="ghost" fullWidth>
+            戻る
+          </Button>
+        </div>
       </div>
     </motion.div>
   );
