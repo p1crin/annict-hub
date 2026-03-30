@@ -231,7 +231,10 @@ export default function DashboardClient({ session }: DashboardClientProps) {
   }, [anime]);
 
   if (loading) {
-    return <Loading message="アニメライブラリを読み込み中..." fullScreen />;
+    const loadingMessage = isCached
+      ? "アニメライブラリを読み込み中..."
+      : "初回読み込み中です。データの取得に1-2分ほどかかる場合があります...";
+    return <Loading message={loadingMessage} fullScreen />;
   }
 
   return (

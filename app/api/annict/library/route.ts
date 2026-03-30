@@ -7,7 +7,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth/session';
 import { annictClient } from '@/lib/api/annict';
 import { jikanClient } from '@/lib/api/jikan';
-import { supabase } from '@/lib/db/supabase';
+import { supabase, getServiceRoleClient } from '@/lib/db/supabase';
 import { fetchAnimeImage } from '@/lib/utils/image-fetcher';
 import type { AnnictStatus } from '@/types/annict';
 import type { AnimeCardData } from '@/types/app';
@@ -52,12 +52,12 @@ export async function GET(request: NextRequest) {
 
       if (!cacheError && cachedAnime && cachedAnime.length > 0) {
         const typedCache = cachedAnime as AnimeCacheRow[];
-        // Check if cache is fresh (less than 1 hour old)
+        // Check if cache is fresh (less than 24 hours old)
         const latestSync = new Date(typedCache[0].synced_at);
         const cacheAge = Date.now() - latestSync.getTime();
-        const oneHour = 60 * 60 * 1000;
+        const twentyFourHours = 24 * 60 * 60 * 1000; // 24 hours
 
-        if (cacheAge < oneHour) {
+        if (cacheAge < twentyFourHours) {
           console.log(`Using cached data (${typedCache.length} items, ${Math.round(cacheAge / 1000 / 60)} minutes old)`);
 
           // Convert cached data to AnimeCardData
@@ -108,6 +108,7 @@ export async function GET(request: NextRequest) {
 
     // Process entries and build anime card data
     const animeData: AnimeCardData[] = [];
+    const cacheDataBatch: AnimeCacheInsert[] = [];
 
     for (const entry of libraryEntries) {
       const work = entry.work;
@@ -130,14 +131,18 @@ export async function GET(request: NextRequest) {
       let imageUrl = work.image?.internalUrl;
       let malAnimeId = cachedAnime?.mal_anime_id;
 
-      // If no Annict image, try to fetch from Jikan
-      if (!imageUrl) {
+      // If no Annict image and no cached image, try to fetch from Jikan
+      if (!imageUrl && !cachedAnime?.image_url) {
         console.log(`No Annict image for ${work.title}, fetching from Jikan...`);
         const imageResult = await fetchAnimeImage(work);
 
         if (imageResult.imageUrl) {
           imageUrl = imageResult.imageUrl;
         }
+      } else if (!imageUrl && cachedAnime?.image_url) {
+        // Reuse cached image
+        console.log(`Using cached image for ${work.title}`);
+        imageUrl = cachedAnime.image_url;
       }
 
       // Use MAL ID from work if available
@@ -145,7 +150,7 @@ export async function GET(request: NextRequest) {
         malAnimeId = work.malAnimeId;
       }
 
-      // Cache anime data in Supabase
+      // Prepare cache data for batch upsert
       const cacheData: AnimeCacheInsert = {
         annict_work_id: work.annictId,
         title: work.title,
@@ -156,7 +161,7 @@ export async function GET(request: NextRequest) {
         image_url: imageUrl,
         synced_at: new Date().toISOString(),
       };
-      await supabase.from('anime_cache').upsert(cacheData as any);
+      cacheDataBatch.push(cacheData);
 
       // Build anime card data
       const cardData: AnimeCardData = {
@@ -173,6 +178,21 @@ export async function GET(request: NextRequest) {
       };
 
       animeData.push(cardData);
+    }
+
+    // Batch upsert all cache data to Supabase
+    if (cacheDataBatch.length > 0) {
+      console.log(`Batch upserting ${cacheDataBatch.length} anime to cache...`);
+      const serviceClient = getServiceRoleClient();
+      const { error: batchCacheError } = await serviceClient
+        .from('anime_cache')
+        .upsert(cacheDataBatch as any, { onConflict: 'annict_work_id' });
+
+      if (batchCacheError) {
+        console.error('Error batch caching anime:', batchCacheError);
+      } else {
+        console.log(`Successfully cached ${cacheDataBatch.length} anime`);
+      }
     }
 
     // Apply limit if specified

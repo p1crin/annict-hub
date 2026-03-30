@@ -6,7 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth/session';
 import { batchMatchAnime } from '@/lib/matching/anime-matcher';
-import { supabase } from '@/lib/db/supabase';
+import { supabase, getServiceRoleClient } from '@/lib/db/supabase';
 import type { AnnictWork } from '@/types/annict';
 import type { ThemeSongData } from '@/types/app';
 import type { AnimeCacheRow, ThemeSongRow } from '@/types/supabase';
@@ -149,7 +149,7 @@ export async function POST(request: NextRequest) {
 
           matchResults[annictId] = themes;
 
-          // Cache in Supabase
+          // Cache in Supabase using service role client
           const themeRecords = themes.map((theme) => ({
             anime_cache_id: cache.id,
             type: theme.type,
@@ -165,7 +165,14 @@ export async function POST(request: NextRequest) {
             synced_at: new Date().toISOString(),
           }));
 
-          await supabase.from('theme_songs').upsert(themeRecords as any);
+          const serviceClient = getServiceRoleClient();
+          const { error: upsertError } = await serviceClient
+            .from('theme_songs')
+            .upsert(themeRecords as any, { onConflict: 'anime_cache_id,type,sequence' });
+
+          if (upsertError) {
+            console.error(`Error upserting theme songs for anime ${annictId}:`, upsertError);
+          }
         }
       }
     }

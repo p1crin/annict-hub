@@ -6,7 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth/session';
 import { matchAnime } from '@/lib/matching/anime-matcher';
-import { supabase } from '@/lib/db/supabase';
+import { supabase, getServiceRoleClient } from '@/lib/db/supabase';
 import type { ThemeSongData } from '@/types/app';
 import type { AnimeCacheRow, ThemeSongInsert, ThemeSongRow } from '@/types/supabase';
 import type { AnimeThemesThemeWithDetails } from '@/types/animethemes';
@@ -147,8 +147,17 @@ export async function GET(
       synced_at: new Date().toISOString(),
     }));
 
-    // Type assertion needed due to Supabase client type inference
-    await supabase.from('theme_songs').upsert(themeRecords as any);
+    // Batch upsert theme songs using service role client
+    const serviceClient = getServiceRoleClient();
+    const { error: upsertError } = await serviceClient
+      .from('theme_songs')
+      .upsert(themeRecords as any, { onConflict: 'anime_cache_id,type,sequence' });
+
+    if (upsertError) {
+      console.error('Error upserting theme songs:', upsertError);
+    } else {
+      console.log(`Successfully cached ${themeRecords.length} theme songs`);
+    }
 
     return NextResponse.json({
       success: true,
