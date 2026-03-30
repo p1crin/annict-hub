@@ -397,7 +397,7 @@ export default function DashboardClient({ session }: DashboardClientProps) {
   if (loading) {
     const loadingMessage = isCached
       ? "アニメライブラリを読み込み中..."
-      : "初回読み込み中です。データの取得に1-2分ほどかかる場合があります...";
+      : "初回読み込み中はデータの取得に数分かかる場合があります";
     return <Loading message={loadingMessage} fullScreen />;
   }
 

@@ -76,6 +76,7 @@ export default function PlaylistCreatorClient({ session }: PlaylistCreatorClient
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          forceRefresh: true, // Force refresh to bypass potentially corrupted cache
           anime: selectedAnime.map((a) => ({
             annictWorkId: a.annictWorkId,
             title: a.title,

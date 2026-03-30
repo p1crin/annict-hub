@@ -62,7 +62,8 @@ export default function AnimeDetailModal({
     setError(null);
 
     try {
-      const response = await fetch(`/api/themes/${annictWorkId}`);
+      // Force refresh to bypass potentially corrupted cache
+      const response = await fetch(`/api/themes/${annictWorkId}?forceRefresh=true`);
       if (!response.ok) {
         throw new Error('Failed to fetch themes');
       }
