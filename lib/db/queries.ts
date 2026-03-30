@@ -60,19 +60,17 @@ export async function upsertUser(user: UserInsert): Promise<UserRow | null> {
 // ========================================
 
 export async function getAnimeCacheByAnnictId(
-  annictWorkId: number
+  annictWorkId: number,
+  annictUserId: number
 ): Promise<AnimeCacheRow | null> {
   const { data, error } = await supabase
     .from('anime_cache')
     .select('*')
+    .eq('annict_user_id', annictUserId)
     .eq('annict_work_id', annictWorkId)
-    .single();
+    .maybeSingle();
 
   if (error) {
-    if (error.code === 'PGRST116') {
-      // Not found
-      return null;
-    }
     console.error('Error fetching anime cache:', error);
     return null;
   }
@@ -81,11 +79,13 @@ export async function getAnimeCacheByAnnictId(
 }
 
 export async function getAnimeCacheByAnnictIds(
-  annictWorkIds: number[]
+  annictWorkIds: number[],
+  annictUserId: number
 ): Promise<AnimeCacheRow[]> {
   const { data, error } = await supabase
     .from('anime_cache')
     .select('*')
+    .eq('annict_user_id', annictUserId)
     .in('annict_work_id', annictWorkIds);
 
   if (error) {
@@ -104,7 +104,7 @@ export async function upsertAnimeCache(
   const { data, error } = await client
     .from('anime_cache')
     .upsert(anime as any, {
-      onConflict: 'annict_work_id',
+      onConflict: 'annict_user_id,annict_work_id',
     })
     .select()
     .single();
@@ -125,7 +125,7 @@ export async function bulkUpsertAnimeCache(
   const { data, error } = await client
     .from('anime_cache')
     .upsert(animes as any, {
-      onConflict: 'annict_work_id',
+      onConflict: 'annict_user_id,annict_work_id',
     })
     .select();
 
@@ -291,16 +291,20 @@ export async function bulkUpsertSpotifyMatches(
 
 export async function checkAnimeCacheFreshness(
   annictWorkId: number,
+  annictUserId: number,
   ttlSeconds?: number
 ): Promise<boolean> {
-  const cached = await getAnimeCacheByAnnictId(annictWorkId);
+  const cached = await getAnimeCacheByAnnictId(annictWorkId, annictUserId);
   if (!cached) return false;
 
   return isCacheFresh(cached.synced_at, ttlSeconds || getCacheTTL());
 }
 
-export async function getCachedAnimeWithThemes(annictWorkId: number) {
-  const anime = await getAnimeCacheByAnnictId(annictWorkId);
+export async function getCachedAnimeWithThemes(
+  annictWorkId: number,
+  annictUserId: number
+) {
+  const anime = await getAnimeCacheByAnnictId(annictWorkId, annictUserId);
   if (!anime) return null;
 
   const themes = await getThemeSongsByAnimeId(anime.id);
