@@ -34,6 +34,7 @@ export default function DashboardClient({ session }: DashboardClientProps) {
   const [selectedStatus, setSelectedStatus] = useState<AnnictStatus | 'ALL'>('ALL');
   const [selectedSeason, setSelectedSeason] = useState<string | 'ALL'>('ALL');
   const [isCached, setIsCached] = useState(false);
+  const [isBackgroundSyncing, setIsBackgroundSyncing] = useState(false);
 
   // Fetch anime library on mount
   useEffect(() => {
@@ -99,10 +100,19 @@ export default function DashboardClient({ session }: DashboardClientProps) {
 
       console.log(`Fetched ${data.data?.length || 0} anime (cached: ${data.cached}, hasMore: ${data.hasMore})`);
 
-      // If cached data was used and incomplete, trigger background sync
-      if (isInitial && data.cached && data.hasMore) {
-        console.log('Starting background sync for remaining anime...');
-        setTimeout(() => fetchAnimeLibrary(false), 1000);
+      // If there are more anime to fetch, trigger background sync
+      if (isInitial && data.hasMore) {
+        if (data.cached) {
+          console.log('Starting background sync for remaining cached anime...');
+        } else {
+          console.log('Starting background fetch for remaining anime (initial load)...');
+        }
+        setIsBackgroundSyncing(true);
+        setTimeout(() => fetchAnimeLibrary(false), 500);
+      } else if (!data.hasMore && isBackgroundSyncing) {
+        // Background sync completed
+        setIsBackgroundSyncing(false);
+        console.log(`Background sync completed. Total: ${anime.length + (data.data?.length || 0)} anime`);
       }
     } catch (error) {
       console.error('Error fetching library:', error);
@@ -274,6 +284,18 @@ export default function DashboardClient({ session }: DashboardClientProps) {
         </div>
       </header>
 
+      {/* Background sync indicator */}
+      {isBackgroundSyncing && (
+        <div className="bg-blue-50 border-b border-blue-200 py-3">
+          <div className="max-w-7xl mx-auto px-4 flex items-center justify-center gap-2">
+            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+            <p className="text-sm text-blue-700">
+              残りのアニメを取得中... ({anime.length}件取得済み)
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Main content */}
       <main className="max-w-7xl mx-auto px-4 py-8">
         {/* Filters */}
@@ -371,16 +393,6 @@ export default function DashboardClient({ session }: DashboardClientProps) {
           </motion.div>
         )}
 
-        {/* Cache info */}
-        {isCached && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            className="mt-8 text-center text-sm text-gray-500"
-          >
-            ⚡ キャッシュから高速読み込み
-          </motion.div>
-        )}
       </main>
     </div>
   );
