@@ -38,7 +38,7 @@ export default function DashboardClient({ session }: DashboardClientProps) {
 
   // Fetch anime library on mount
   useEffect(() => {
-    fetchAnimeLibrary(true);
+    fetchAllAnime();
   }, []);
 
   // Check for Spotify connection status
@@ -61,6 +61,71 @@ export default function DashboardClient({ session }: DashboardClientProps) {
     }
   }, [searchParams, router]);
 
+  const fetchAllAnime = async () => {
+    setLoading(true);
+
+    try {
+      let cursor: string | null = null;
+      let allAnime: AnimeCardData[] = [];
+      let page = 1;
+
+      while (true) {
+        const params = new URLSearchParams();
+        params.set('limit', '50');
+
+        if (cursor) {
+          params.set('after', cursor);
+          params.set('cache', 'false');
+        }
+
+        console.log(`📥 Fetching page ${page}... cursor=${cursor}`);
+
+        const res = await fetch(`/api/annict/library?${params}`);
+
+        if (!res.ok) {
+          throw new Error(`API error: ${res.status}`);
+        }
+
+        const data = await res.json();
+
+        const fetched: AnimeCardData[] = data.data || [];
+
+        console.log(`Fetched ${fetched.length} anime`);
+
+        // 重複排除
+        const map = new Map<number, AnimeCardData>();
+
+        [...allAnime, ...fetched].forEach((anime) => {
+          map.set(anime.annictWorkId, anime);
+        });
+
+        allAnime = Array.from(map.values());
+
+        // UI更新（途中経過）
+        setAnime([...allAnime]);
+
+        if (!data.hasMore) {
+          console.log("✅ Finished fetching all anime");
+          break;
+        }
+
+        cursor = data.endCursor;
+        page++;
+
+        // Annict rate limit対策
+        await new Promise((r) => setTimeout(r, 300));
+      }
+
+      setHasMore(false);
+      setEndCursor(null);
+
+      console.log(`🎉 Total anime: ${allAnime.length}`);
+    } catch (err) {
+      console.error("Error fetching anime:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
   /**
    * Fetch anime library from API
    */
