@@ -133,8 +133,24 @@ export default function PlaylistCreatorClient({ session }: PlaylistCreatorClient
 
       const data = await response.json();
 
-      // Convert matches object to array
-      const matchesArray = Object.values(data.matches) as SpotifyMatchResult[];
+      // Convert ThemeSpotifyMatch to SpotifyMatchResult
+      const matchesArray = Object.values(data.matches).map((match: any) => {
+        // Find corresponding theme by comparing theme ID
+        const theme = themesToMatch.find(t => t.id === match.themeId || `${t.annictWorkId}-${t.type}${t.sequence}` === match.themeId);
+
+        if (!theme) {
+          console.warn(`Could not find theme for match: ${match.themeId}`);
+        }
+
+        return {
+          theme: theme || themesToMatch[0], // Fallback to first theme if not found
+          spotifyTrack: match.bestMatch?.track || null,
+          score: match.bestMatch?.score,
+          confidence: match.bestMatch?.confidence || 'low',
+        } as SpotifyMatchResult;
+      });
+
+      console.log(`Converted ${matchesArray.length} matches`);
       setMatches(matchesArray);
       setCurrentStep('review');
 

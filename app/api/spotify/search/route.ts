@@ -129,10 +129,17 @@ export async function POST(request: NextRequest) {
 
     // Match themes with Spotify tracks
     // Transform themes to include animeTitle for each theme
-    const themesWithAnimeTitle = themes.map(theme => ({
-      theme: adaptThemeSongData(theme),
-      animeTitle: animeTitle || ''
-    }));
+    const themesWithAnimeTitle = themes.map(theme => {
+      const adapted = adaptThemeSongData(theme);
+      console.log(`Adapted theme: ${JSON.stringify({
+        original: { title: theme.title, artist: theme.artist },
+        adapted: { songTitle: adapted.songTitle, artistNames: adapted.artistNames }
+      })}`);
+      return {
+        theme: adapted,
+        animeTitle: animeTitle || ''
+      };
+    });
 
     const matches = await batchMatchThemesToSpotify(
       themesWithAnimeTitle,
