@@ -17,7 +17,7 @@ const poppins = Poppins({
 });
 
 export const metadata: Metadata = {
-  title: "🎵 AnnictHub - アニメ主題歌プレイリスト作成",
+  title: "AnnictHub - アニメ主題歌プレイリスト作成",
   description: "Annictの視聴履歴から、アニメ主題歌のSpotifyプレイリストを自動作成",
 };
 

@@ -48,13 +48,7 @@ export async function fetchAnimeImage(
  * Get image URL from Annict work
  */
 function getAnnictImageUrl(work: AnnictWork): string | null {
-  return (
-    work.images.recommendedUrl ||
-    work.images.facebookOgImageUrl ||
-    work.images.twitterBiggerAvatarUrl ||
-    work.images.twitterNormalAvatarUrl ||
-    null
-  );
+  return work.image?.internalUrl || null;
 }
 
 /**

@@ -81,9 +81,9 @@ export default function AnimeCard({
         <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
 
         {/* Status badge */}
-        {anime.watchedStatus && anime.watchedStatus !== 'NO_STATE' && (
+        {anime.status && anime.status !== 'NO_STATUS' && (
           <div className="absolute top-3 right-3">
-            <StatusBadge status={anime.watchedStatus} />
+            <StatusBadge status={anime.status} />
           </div>
         )}
       </div>

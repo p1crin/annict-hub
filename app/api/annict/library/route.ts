@@ -38,21 +38,77 @@ export async function GET(request: NextRequest) {
     const statusParam = searchParams.get('status') as AnnictStatus | null;
     const seasonParam = searchParams.get('season');
     const limitParam = searchParams.get('limit');
+    const afterCursor = searchParams.get('after');
     const forceRefresh = searchParams.get('forceRefresh') === 'true';
+    const useCache = searchParams.get('cache') !== 'false'; // Default to true
 
-    // Fetch all library entries from Annict
+    // If using cache, try to get from Supabase first (only on initial load)
+    if (useCache && !forceRefresh && !afterCursor) {
+      const { data: cachedAnime, error: cacheError } = await supabase
+        .from('anime_cache')
+        .select('*')
+        .order('synced_at', { ascending: false })
+        .limit(limitParam ? parseInt(limitParam, 10) : 1000);
+
+      if (!cacheError && cachedAnime && cachedAnime.length > 0) {
+        // Check if cache is fresh (less than 1 hour old)
+        const latestSync = new Date(cachedAnime[0].synced_at);
+        const cacheAge = Date.now() - latestSync.getTime();
+        const oneHour = 60 * 60 * 1000;
+
+        if (cacheAge < oneHour) {
+          console.log(`Using cached data (${cachedAnime.length} items, ${Math.round(cacheAge / 1000 / 60)} minutes old)`);
+
+          // Convert cached data to AnimeCardData
+          const animeData: AnimeCardData[] = cachedAnime.map((anime: any) => ({
+            id: `${anime.annict_work_id}`,
+            annictWorkId: anime.annict_work_id,
+            title: anime.title,
+            titleEn: anime.title_en,
+            imageUrl: anime.image_url || '/placeholder-anime.png',
+            seasonYear: anime.season_year,
+            seasonName: anime.season_name,
+            status: 'WATCHED' as AnnictStatus,
+            hasThemes: false,
+            themesCount: 0,
+          }));
+
+          return NextResponse.json({
+            success: true,
+            data: animeData,
+            total: animeData.length,
+            filtered: animeData.length,
+            cached: true,
+            cacheAge: Math.round(cacheAge / 1000 / 60), // minutes
+            hasMore: false,
+            endCursor: null,
+          });
+        }
+      }
+    }
+
+    // Fetch from Annict (limit to 50 for initial load)
     const states: AnnictStatus[] = statusParam ? [statusParam] : ['WATCHED'];
-    const entries = await annictClient.getAllLibraryEntries(
+    const fetchLimit = limitParam ? parseInt(limitParam, 10) : 50;
+
+    console.log(`Fetching ${fetchLimit} entries from Annict${afterCursor ? ' (page ' + afterCursor + ')' : ''}...`);
+
+    const entries = await annictClient.getLibraryEntries(
       session.annictToken,
-      states
+      {
+        first: fetchLimit,
+        after: afterCursor || undefined,
+        states,
+      }
     );
 
-    console.log(`Total entries fetched: ${entries.length}`);
+    const libraryEntries = entries.edges.map(edge => edge.node);
+    console.log(`Fetched ${libraryEntries.length} entries from Annict`);
 
     // Process entries and build anime card data
     const animeData: AnimeCardData[] = [];
 
-    for (const entry of entries) {
+    for (const entry of libraryEntries) {
       const work = entry.work;
 
       // Check cache first (unless force refresh)
@@ -70,7 +126,7 @@ export async function GET(request: NextRequest) {
       }
 
       // Determine image URL
-      let imageUrl = work.images?.facebookOgImageUrl || work.images?.recommendedUrl;
+      let imageUrl = work.image?.internalUrl;
       let malAnimeId = cachedAnime?.mal_anime_id;
 
       // If no Annict image, try to fetch from Jikan
@@ -110,7 +166,7 @@ export async function GET(request: NextRequest) {
         imageUrl: imageUrl || '/placeholder-anime.png',
         seasonYear: work.seasonYear,
         seasonName: work.seasonName,
-        status: entry.status,
+        status: entry.status.state,
         hasThemes: false, // Will be updated when themes are fetched
         themesCount: 0, // Will be updated when themes are fetched
       };
@@ -129,6 +185,9 @@ export async function GET(request: NextRequest) {
       data: limitedData,
       total: animeData.length,
       filtered: limitedData.length,
+      cached: false,
+      hasMore: entries.pageInfo.hasNextPage,
+      endCursor: entries.pageInfo.endCursor || null,
     });
 
   } catch (error: any) {

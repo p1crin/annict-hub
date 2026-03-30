@@ -26,14 +26,18 @@ export default function DashboardClient({ session }: DashboardClientProps) {
   // State
   const [anime, setAnime] = useState<AnimeCardData[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(false);
+  const [endCursor, setEndCursor] = useState<string | null>(null);
   const [selectedAnime, setSelectedAnime] = useState<number[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedStatus, setSelectedStatus] = useState<AnnictStatus | 'ALL'>('ALL');
   const [selectedSeason, setSelectedSeason] = useState<string | 'ALL'>('ALL');
+  const [isCached, setIsCached] = useState(false);
 
   // Fetch anime library on mount
   useEffect(() => {
-    fetchAnimeLibrary();
+    fetchAnimeLibrary(true);
   }, []);
 
   // Check for Spotify connection status
@@ -59,21 +63,68 @@ export default function DashboardClient({ session }: DashboardClientProps) {
   /**
    * Fetch anime library from API
    */
-  const fetchAnimeLibrary = async () => {
-    setLoading(true);
+  const fetchAnimeLibrary = async (isInitial = false) => {
+    if (isInitial) {
+      setLoading(true);
+    } else {
+      setLoadingMore(true);
+    }
+
     try {
-      const response = await fetch('/api/annict/library');
+      // Build query parameters
+      const params = new URLSearchParams();
+      if (!isInitial && endCursor) {
+        params.set('after', endCursor);
+      }
+      params.set('limit', '50');
+
+      const response = await fetch(`/api/annict/library?${params}`);
       if (!response.ok) {
-        throw new Error('Failed to fetch library');
+        const errorData = await response.json().catch(() => ({}));
+        console.error('API Error Response:', errorData);
+        throw new Error(errorData.error || `Failed to fetch library (${response.status})`);
       }
 
       const data = await response.json();
-      setAnime(data.data || []);
+
+      if (isInitial) {
+        setAnime(data.data || []);
+        setIsCached(data.cached || false);
+      } else {
+        setAnime(prev => [...prev, ...(data.data || [])]);
+      }
+
+      setHasMore(data.hasMore || false);
+      setEndCursor(data.endCursor || null);
+
+      console.log(`Fetched ${data.data?.length || 0} anime (cached: ${data.cached}, hasMore: ${data.hasMore})`);
+
+      // If cached data was used and incomplete, trigger background sync
+      if (isInitial && data.cached && data.hasMore) {
+        console.log('Starting background sync for remaining anime...');
+        setTimeout(() => fetchAnimeLibrary(false), 1000);
+      }
     } catch (error) {
       console.error('Error fetching library:', error);
-      // Show error message
+      // Show error message to user
+      if (isInitial) {
+        alert(`エラー: ${error instanceof Error ? error.message : 'アニメライブラリの取得に失敗しました'}`);
+      }
     } finally {
-      setLoading(false);
+      if (isInitial) {
+        setLoading(false);
+      } else {
+        setLoadingMore(false);
+      }
+    }
+  };
+
+  /**
+   * Load more anime
+   */
+  const handleLoadMore = () => {
+    if (!loadingMore && hasMore) {
+      fetchAnimeLibrary(false);
     }
   };
 
@@ -144,7 +195,7 @@ export default function DashboardClient({ session }: DashboardClientProps) {
 
     // Filter by status
     if (selectedStatus !== 'ALL') {
-      filtered = filtered.filter((a) => a.watchedStatus === selectedStatus);
+      filtered = filtered.filter((a) => a.status === selectedStatus);
     }
 
     // Filter by season
@@ -274,7 +325,7 @@ export default function DashboardClient({ session }: DashboardClientProps) {
             className="mb-6 p-4 bg-soft-yellow rounded-2xl shadow-pastel"
           >
             <p className="text-sm text-gray-700 text-center">
-              ℹ️ プレイリストを作成するには、Spotifyアカウントを連携してください
+              プレイリストを作成するには、Spotifyアカウントを連携してください
             </p>
           </motion.div>
         )}
@@ -287,6 +338,46 @@ export default function DashboardClient({ session }: DashboardClientProps) {
           selectedAnime={selectedAnime}
           onToggleSelect={handleToggleSelect}
         />
+
+        {/* Load more button */}
+        {hasMore && !searchQuery && selectedStatus === 'ALL' && selectedSeason === 'ALL' && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mt-8 flex justify-center"
+          >
+            <Button
+              onClick={handleLoadMore}
+              disabled={loadingMore}
+              variant="secondary"
+              size="lg"
+            >
+              {loadingMore ? '読み込み中...' : 'もっと読み込む'}
+            </Button>
+          </motion.div>
+        )}
+
+        {/* Loading more indicator */}
+        {loadingMore && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="mt-4 flex justify-center"
+          >
+            <Loading message="追加のアニメを読み込み中..." />
+          </motion.div>
+        )}
+
+        {/* Cache info */}
+        {isCached && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="mt-8 text-center text-sm text-gray-500"
+          >
+            ⚡ キャッシュから高速読み込み
+          </motion.div>
+        )}
       </main>
     </div>
   );

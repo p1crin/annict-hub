@@ -60,30 +60,26 @@ export interface AnnictWork {
   titleEn?: string;
   titleRo?: string;
   malAnimeId?: number;
-  anilistAnimeId?: number;
   seasonYear?: number;
   seasonName?: AnnictSeasonName;
   episodesCount?: number;
-  watchersCount: number;
-  reviewsCount: number;
-  media: AnnictMedia;
+  watchersCount?: number;
+  reviewsCount?: number;
+  media?: AnnictMedia;
   officialSiteUrl?: string;
   wikipediaUrl?: string;
   twitterUsername?: string;
   twitterHashtag?: string;
   syobocalTid?: number;
-  images: AnnictWorkImages;
-  casts: AnnictCastsConnection;
-  staffs: AnnictStaffsConnection;
-  programs: AnnictProgramsConnection;
+  image?: AnnictWorkImages;
+  casts?: AnnictCastsConnection;
+  staffs?: AnnictStaffsConnection;
+  programs?: AnnictProgramsConnection;
 }
 
 export interface AnnictWorkImages {
-  recommendedUrl?: string;
-  facebookOgImageUrl?: string;
-  twitterBiggerAvatarUrl?: string;
-  twitterMiniAvatarUrl?: string;
-  twitterNormalAvatarUrl?: string;
+  internalUrl?: string;
+  copyright?: string;
 }
 
 export type AnnictSeasonName = 'WINTER' | 'SPRING' | 'SUMMER' | 'AUTUMN';
@@ -96,9 +92,10 @@ export type AnnictMedia = 'TV' | 'OVA' | 'MOVIE' | 'WEB' | 'OTHER';
 
 export interface AnnictLibraryEntry {
   id: string;
-  status: AnnictStatus;
+  status: {
+    state: AnnictStatus;
+  };
   note?: string;
-  createdAt: string;
   updatedAt?: string;
   work: AnnictWork;
 }
@@ -255,7 +252,7 @@ export interface AnnictLibraryEntriesQueryVariables {
   after?: string;
   states?: AnnictStatus[];
   orderBy?: {
-    field: 'CREATED_AT' | 'SEASON';
+    field: 'LAST_TRACKED_AT' | 'SEASON';
     direction: 'ASC' | 'DESC';
   };
   seasons?: string[]; // e.g., ['2024-autumn', '2024-summer']

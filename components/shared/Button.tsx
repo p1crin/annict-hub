@@ -35,15 +35,14 @@ export default function Button({
 
   const variants = {
     primary:
-      'bg-gradient-to-r from-lavender to-peach text-white hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed',
+      'bg-gradient-to-r from-violet-500 to-pink-400 text-white hover:shadow-lg disabled:bg-gray-200 disabled:text-gray-400',
     secondary:
-      'bg-gradient-to-r from-mint to-baby-blue text-white hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed',
+      'bg-gradient-to-r from-emerald-400 to-sky-400 text-white hover:shadow-lg disabled:bg-gray-200 disabled:text-gray-400',
     outline:
-      'border-2 border-lavender text-lavender bg-white hover:bg-lavender hover:text-white disabled:opacity-50 disabled:cursor-not-allowed',
+      'border-2 border-violet-500 text-violet-600 bg-white hover:bg-violet-50 disabled:border-gray-300 disabled:text-gray-400',
     ghost:
-      'bg-gray-100 text-gray-700 hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed',
+      'bg-gray-100 text-gray-700 hover:bg-gray-200 disabled:bg-gray-100 disabled:text-gray-400',
   };
-
   const sizes = {
     sm: 'px-4 py-2 text-sm',
     md: 'px-6 py-3 text-base',

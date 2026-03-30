@@ -102,7 +102,7 @@ class AnnictClient {
       first = 50,
       after,
       states = ['WATCHED'],
-      orderBy = { field: 'CREATED_AT', direction: 'DESC' },
+      orderBy = { field: 'LAST_TRACKED_AT', direction: 'DESC' },
       seasons,
     } = options;
 
@@ -125,8 +125,9 @@ class AnnictClient {
             edges {
               node {
                 id
-                status
-                createdAt
+                status {
+                  state
+                }
                 work {
                   id
                   annictId
@@ -134,7 +135,6 @@ class AnnictClient {
                   titleKana
                   titleEn
                   malAnimeId
-                  anilistAnimeId
                   seasonYear
                   seasonName
                   episodesCount
@@ -142,10 +142,9 @@ class AnnictClient {
                   media
                   officialSiteUrl
                   twitterUsername
-                  images {
-                    recommendedUrl
-                    facebookOgImageUrl
-                    twitterBiggerAvatarUrl
+                  image {
+                    internalUrl(size: "large")
+                    copyright
                   }
                 }
               }
@@ -249,10 +248,9 @@ class AnnictClient {
             seasonName
             episodesCount
             media
-            images {
-              recommendedUrl
-              facebookOgImageUrl
-              twitterBiggerAvatarUrl
+            image {
+              internalUrl(size: "large")
+              copyright
             }
           }
         }
@@ -272,11 +270,7 @@ class AnnictClient {
    * Extract image URL from work
    */
   getWorkImageUrl(work: AnnictWork): string | undefined {
-    return (
-      work.images.recommendedUrl ||
-      work.images.facebookOgImageUrl ||
-      work.images.twitterBiggerAvatarUrl
-    );
+    return work.image?.internalUrl;
   }
 
   /**
@@ -289,15 +283,13 @@ class AnnictClient {
       title: entry.work.title,
       titleEn: entry.work.titleEn,
       malAnimeId: entry.work.malAnimeId,
-      anilistAnimeId: entry.work.anilistAnimeId,
       seasonYear: entry.work.seasonYear,
       seasonName: entry.work.seasonName,
       episodesCount: entry.work.episodesCount,
       watchersCount: entry.work.watchersCount,
       media: entry.work.media,
-      status: entry.status,
+      status: entry.status.state,
       imageUrl: this.getWorkImageUrl(entry.work),
-      createdAt: entry.createdAt,
     }));
   }
 
