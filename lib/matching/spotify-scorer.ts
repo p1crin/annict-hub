@@ -22,6 +22,7 @@ export interface ThemeSpotifyMatch {
 /**
  * Create search query from theme
  * Prefers Japanese titles when available for better Spotify matching
+ * No additional keywords to avoid polluting search results
  */
 export function createSearchQuery(
   theme: AnimeThemesThemeWithDetails,
@@ -30,7 +31,6 @@ export function createSearchQuery(
   return {
     trackTitle: theme.songTitleJa || theme.songTitle || theme.song?.title || 'Unknown',
     artistName: theme.artistNamesJa || theme.artistNames || theme.song?.artists?.[0]?.name,
-    additionalKeywords: ['anime', theme.type === 'OP' ? 'opening' : 'ending'],
   };
 }
 
@@ -44,7 +44,6 @@ function createFallbackSearchQuery(
   return {
     trackTitle: theme.songTitle || theme.song?.title || 'Unknown',
     artistName: theme.artistNames || theme.song?.artists?.[0]?.name,
-    additionalKeywords: ['anime', theme.type === 'OP' ? 'opening' : 'ending'],
   };
 }
 

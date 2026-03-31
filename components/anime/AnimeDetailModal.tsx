@@ -244,11 +244,21 @@ function ThemeItem({ theme }: { theme: ThemeSongData }) {
           </p>
 
           {/* Title */}
-          <p className="font-semibold text-gray-800 mb-1">{theme.title}</p>
+          <p className="font-semibold text-gray-800 mb-1">
+            {theme.titleJa || theme.title}
+          </p>
+          {theme.titleJa && theme.titleJa !== theme.title && (
+            <p className="text-xs text-gray-400 mb-1">{theme.title}</p>
+          )}
 
           {/* Artist */}
-          {theme.artist && (
-            <p className="text-sm text-gray-600">{theme.artist}</p>
+          {(theme.artistJa || theme.artist) && (
+            <p className="text-sm text-gray-600">
+              {theme.artistJa || theme.artist}
+            </p>
+          )}
+          {theme.artistJa && theme.artist && theme.artistJa !== theme.artist && (
+            <p className="text-xs text-gray-400">{theme.artist}</p>
           )}
 
           {/* Source */}
