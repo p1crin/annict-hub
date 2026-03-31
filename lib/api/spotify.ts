@@ -87,19 +87,29 @@ class SpotifyClient {
    * Calculate similarity between two strings (0-1)
    */
   private calculateStringSimilarity(str1: string, str2: string): number {
+    // Normalize: lowercase, keep alphanumeric + CJK + Hiragana + Katakana, strip punctuation
     const normalize = (s: string) =>
-      s.toLowerCase().replace(/[^\w\s]/g, '').trim();
+      s.toLowerCase()
+        .replace(/[^\w\s\u3000-\u9FFF\uF900-\uFAFF\uFF00-\uFFEF]/g, '')
+        .replace(/\s+/g, ' ')
+        .trim();
 
     const normalized1 = normalize(str1);
     const normalized2 = normalize(str2);
 
     if (normalized1 === normalized2) return 1.0;
+    if (normalized1.length === 0 || normalized2.length === 0) return 0;
+
+    // Check containment (one string contains the other)
+    if (normalized1.includes(normalized2) || normalized2.includes(normalized1)) {
+      const shorter = normalized1.length < normalized2.length ? normalized1 : normalized2;
+      const longer = normalized1.length < normalized2.length ? normalized2 : normalized1;
+      return shorter.length / longer.length;
+    }
 
     // Levenshtein distance-based similarity
     const longer = normalized1.length > normalized2.length ? normalized1 : normalized2;
     const shorter = normalized1.length > normalized2.length ? normalized2 : normalized1;
-
-    if (longer.length === 0) return 1.0;
 
     const editDistance = this.levenshteinDistance(longer, shorter);
     return (longer.length - editDistance) / longer.length;

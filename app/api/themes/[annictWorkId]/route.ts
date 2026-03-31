@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth/session';
 import { matchAnime } from '@/lib/matching/anime-matcher';
+import { jikanClient } from '@/lib/api/jikan';
 import { supabase, getServiceRoleClient } from '@/lib/db/supabase';
 import type { ThemeSongData } from '@/types/app';
 import type { AnimeCacheRow, ThemeSongInsert, ThemeSongRow } from '@/types/supabase';
@@ -71,7 +72,9 @@ export async function GET(
           type: theme.type,
           sequence: theme.sequence,
           title: theme.title,
+          titleJa: theme.title_ja || undefined,
           artist: theme.artist,
+          artistJa: theme.artist_ja || undefined,
           episodes: theme.episodes,
           videoUrl: theme.video_url,
           audioUrl: undefined,
@@ -116,21 +119,34 @@ export async function GET(
       });
     }
 
+    // Enrich with Japanese titles from Jikan
+    const jikanThemes = work.malAnimeId
+      ? await jikanClient.getParsedThemes(work.malAnimeId)
+      : [];
+
     // Convert to ThemeSongData
-    const themes: ThemeSongData[] = result.themes.map((theme: AnimeThemesThemeWithDetails) => ({
-      id: `${annictWorkId}-${theme.type}${theme.sequence}`,
-      annictWorkId: result.annictWorkId,
-      type: theme.type,
-      sequence: theme.sequence,
-      title: theme.songTitle || theme.song?.title || `${theme.type}${theme.sequence}`,
-      artist: theme.artistNames,
-      videoUrl: theme.bestVideo?.link,
-      audioUrl: theme.bestVideo?.audio?.link,
-      source: 'animethemes' as const,
-      confidence: undefined,
-      animethemesAnimeId: result.animethemesAnimeId,
-      animethemesThemeId: theme.id,
-    }));
+    const themes: ThemeSongData[] = result.themes.map((theme: AnimeThemesThemeWithDetails) => {
+      const jikanMatch = jikanThemes.find(
+        (jt) => jt.type === theme.type && jt.sequence === theme.sequence
+      );
+
+      return {
+        id: `${annictWorkId}-${theme.type}${theme.sequence}`,
+        annictWorkId: result.annictWorkId,
+        type: theme.type,
+        sequence: theme.sequence,
+        title: theme.songTitle || theme.song?.title || `${theme.type}${theme.sequence}`,
+        titleJa: jikanMatch?.titleJa,
+        artist: theme.artistNames,
+        artistJa: jikanMatch?.artistJa,
+        videoUrl: theme.bestVideo?.link,
+        audioUrl: theme.bestVideo?.audio?.link,
+        source: 'animethemes' as const,
+        confidence: undefined,
+        animethemesAnimeId: result.animethemesAnimeId,
+        animethemesThemeId: theme.id,
+      };
+    });
 
     // Cache in Supabase using anime_cache_id
     const themeRecords = themes.map((theme) => ({
@@ -138,7 +154,9 @@ export async function GET(
       type: theme.type,
       sequence: theme.sequence,
       title: theme.title,
+      title_ja: theme.titleJa,
       artist: theme.artist,
+      artist_ja: theme.artistJa,
       episodes: undefined,
       animethemes_id: theme.animethemesThemeId,
       animethemes_slug: `${theme.type}${theme.sequence}`,
