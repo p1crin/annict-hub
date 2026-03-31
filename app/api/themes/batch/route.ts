@@ -6,10 +6,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth/session';
 import { batchMatchAnime } from '@/lib/matching/anime-matcher';
+import { jikanClient } from '@/lib/api/jikan';
 import { supabase, getServiceRoleClient } from '@/lib/db/supabase';
 import type { AnnictWork } from '@/types/annict';
 import type { ThemeSongData } from '@/types/app';
 import type { AnimeCacheRow, ThemeSongRow } from '@/types/supabase';
+import type { JikanParsedTheme } from '@/types/jikan';
 
 export const dynamic = 'force-dynamic';
 
@@ -93,7 +95,9 @@ export async function POST(request: NextRequest) {
             type: theme.type as 'OP' | 'ED',
             sequence: theme.sequence,
             title: theme.title,
+            titleJa: theme.title_ja || undefined,
             artist: theme.artist || undefined,
+            artistJa: theme.artist_ja || undefined,
             episodes: theme.episodes || undefined,
             videoUrl: theme.video_url || undefined,
             audioUrl: undefined,
@@ -128,25 +132,48 @@ export async function POST(request: NextRequest) {
         }
       );
 
+      // Enrich with Japanese titles from Jikan API
+      const malIdsToEnrich = worksToMatch
+        .filter(w => w.malAnimeId != null)
+        .map(w => w.malAnimeId!);
+
+      const jikanThemesMap = malIdsToEnrich.length > 0
+        ? await jikanClient.batchGetThemes(malIdsToEnrich)
+        : new Map();
+
       // Convert match results to ThemeSongData and cache
       for (const [annictId, result] of results.entries()) {
         if (result.success && result.themes) {
           const cache = animeCacheMap.get(annictId)!;
-          const themes: ThemeSongData[] = result.themes.map((theme) => ({
-            id: `${annictId}-${theme.type}${theme.sequence}`,
-            annictWorkId: annictId,
-            type: theme.type,
-            sequence: theme.sequence,
-            title: theme.songTitle || theme.song?.title || `${theme.type}${theme.sequence}`,
-            artist: theme.artistNames,
-            episodes: theme.episodeRange,
-            videoUrl: theme.bestVideo?.link,
-            audioUrl: theme.bestVideo?.audio?.link,
-            source: 'animethemes' as const,
-            confidence: undefined,
-            animethemesAnimeId: result.animethemesAnimeId,
-            animethemesThemeId: theme.id,
-          }));
+          const work = worksToMatch.find(w => w.annictId === annictId);
+          const jikanThemes = work?.malAnimeId
+            ? jikanThemesMap.get(work.malAnimeId) || []
+            : [];
+
+          const themes: ThemeSongData[] = result.themes.map((theme) => {
+            // Find matching Jikan theme by type and sequence for Japanese titles
+            const jikanMatch = jikanThemes.find(
+              (jt: JikanParsedTheme) => jt.type === theme.type && jt.sequence === theme.sequence
+            );
+
+            return {
+              id: `${annictId}-${theme.type}${theme.sequence}`,
+              annictWorkId: annictId,
+              type: theme.type,
+              sequence: theme.sequence,
+              title: theme.songTitle || theme.song?.title || `${theme.type}${theme.sequence}`,
+              titleJa: jikanMatch?.titleJa,
+              artist: theme.artistNames,
+              artistJa: jikanMatch?.artistJa,
+              episodes: theme.episodeRange,
+              videoUrl: theme.bestVideo?.link,
+              audioUrl: theme.bestVideo?.audio?.link,
+              source: 'animethemes' as const,
+              confidence: undefined,
+              animethemesAnimeId: result.animethemesAnimeId,
+              animethemesThemeId: theme.id,
+            };
+          });
 
           matchResults[annictId] = themes;
 
@@ -156,7 +183,9 @@ export async function POST(request: NextRequest) {
             type: theme.type,
             sequence: theme.sequence,
             title: theme.title,
+            title_ja: theme.titleJa,
             artist: theme.artist,
+            artist_ja: theme.artistJa,
             episodes: theme.episodes,
             animethemes_id: theme.animethemesThemeId,
             animethemes_slug: `${theme.type}${theme.sequence}`,

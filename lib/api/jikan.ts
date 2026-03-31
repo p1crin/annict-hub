@@ -86,9 +86,24 @@ class JikanClient {
   }
 
   /**
+   * Extract Japanese text from parenthesized content within a string.
+   * E.g., "Guren no Yumiya (紅蓮の弓矢)" -> { base: "Guren no Yumiya", japanese: "紅蓮の弓矢" }
+   */
+  private extractJapanese(text: string): { base: string; japanese?: string } {
+    // Match text with Japanese characters (Hiragana, Katakana, CJK) in parentheses
+    const jaRegex = /^(.*?)\s*\(([^)]*[\u3000-\u9FFF\uF900-\uFAFF][^)]*)\)\s*$/;
+    const match = text.match(jaRegex);
+    if (match) {
+      return { base: match[1].trim(), japanese: match[2].trim() };
+    }
+    return { base: text.trim() };
+  }
+
+  /**
    * Parse theme string from Jikan
    * Example: "1: \"Gurenge\" by LiSA (eps 1-19)"
-   * Example: "#2: \"Homura\" by LiSA"
+   * Example: "#2: \"Homura (炎)\" by LiSA"
+   * Example: "1: \"Guren no Yumiya (紅蓮の弓矢)\" by Linked Horizon (eps 1-13)"
    */
   parseThemeString(themeString: string, type: 'OP' | 'ED'): JikanParsedTheme | null {
     try {
@@ -101,12 +116,34 @@ class JikanClient {
         return null;
       }
 
-      const [, sequenceStr, title, artist, episodes] = match;
+      const [, sequenceStr, rawTitle, rawArtist, episodes] = match;
+
+      // Extract Japanese title from parentheses within the title
+      const titleResult = this.extractJapanese(rawTitle);
+
+      // Extract Japanese artist name from the raw string after "by"
+      let artistBase = rawArtist?.trim();
+      let artistJa: string | undefined;
+      if (artistBase) {
+        // Re-parse artist from raw string to capture Japanese in parens
+        // e.g., 'Linked Horizon (きただにひろし) (eps 1-13)' or 'Linked Horizon (きただにひろし)'
+        const byIndex = themeString.indexOf('" by ');
+        if (byIndex !== -1) {
+          const afterBy = themeString.substring(byIndex + 5);
+          // Remove trailing episode info like (eps 1-13)
+          const withoutEps = afterBy.replace(/\s*\(eps?\s*[\d\s,\-]+\)\s*$/i, '').trim();
+          const artistResult = this.extractJapanese(withoutEps);
+          artistBase = artistResult.base;
+          artistJa = artistResult.japanese;
+        }
+      }
 
       return {
         sequence: parseInt(sequenceStr, 10),
-        title: title.trim(),
-        artist: artist?.trim(),
+        title: titleResult.base,
+        titleJa: titleResult.japanese,
+        artist: artistBase,
+        artistJa,
         episodes: episodes?.replace(/eps?\s*/i, '').trim(),
         type,
         rawString: themeString,

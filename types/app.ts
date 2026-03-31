@@ -36,7 +36,9 @@ export interface ThemeSongData {
   type: 'OP' | 'ED';
   sequence: number;
   title: string;
+  titleJa?: string;
   artist?: string;
+  artistJa?: string;
   episodes?: string;
   videoUrl?: string;
   audioUrl?: string;

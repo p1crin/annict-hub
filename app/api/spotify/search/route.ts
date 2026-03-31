@@ -32,7 +32,9 @@ function adaptThemeSongData(theme: ThemeSongData): AnimeThemesThemeWithDetails {
     sequence: theme.sequence,
     slug: `${theme.type}${theme.sequence}`,
     songTitle: theme.title,
+    songTitleJa: theme.titleJa,
     artistNames: theme.artist,
+    artistNamesJa: theme.artistJa,
     song: theme.title ? {
       id: 0,
       title: theme.title,

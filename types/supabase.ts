@@ -100,7 +100,9 @@ export interface ThemeSongRow {
   type: 'OP' | 'ED';
   sequence: number; // 1, 2, 3, etc.
   title: string;
+  title_ja?: string;
   artist?: string;
+  artist_ja?: string;
   episodes?: string; // e.g., "1-12"
   animethemes_id?: number; // AnimeThemes.moe theme ID
   animethemes_slug?: string; // e.g., "OP1"

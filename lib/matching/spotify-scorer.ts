@@ -21,8 +21,23 @@ export interface ThemeSpotifyMatch {
 
 /**
  * Create search query from theme
+ * Prefers Japanese titles when available for better Spotify matching
  */
 export function createSearchQuery(
+  theme: AnimeThemesThemeWithDetails,
+  animeTitle: string
+): SpotifySearchQuery {
+  return {
+    trackTitle: theme.songTitleJa || theme.songTitle || theme.song?.title || 'Unknown',
+    artistName: theme.artistNamesJa || theme.artistNames || theme.song?.artists?.[0]?.name,
+    additionalKeywords: ['anime', theme.type === 'OP' ? 'opening' : 'ending'],
+  };
+}
+
+/**
+ * Create romanized fallback search query
+ */
+function createFallbackSearchQuery(
   theme: AnimeThemesThemeWithDetails,
   animeTitle: string
 ): SpotifySearchQuery {
@@ -43,16 +58,34 @@ export async function matchThemeToSpotify(
   options: SpotifyMatchingOptions = {}
 ): Promise<ThemeSpotifyMatch> {
   const query = createSearchQuery(theme, animeTitle);
+  const searchOptions = { minScore: 50, maxResults: 5, ...options };
 
-  const matches = await spotifyClient.searchAndMatch(
+  let matches = await spotifyClient.searchAndMatch(
     query,
     accessToken,
-    {
-      minScore: 50, // Lower threshold to get more candidates
-      maxResults: 5,
-      ...options,
-    }
+    searchOptions,
   );
+
+  // Fallback: if Japanese title was used but results are poor, retry with romanized
+  const hasJapaneseTitle = theme.songTitleJa && theme.songTitleJa !== theme.songTitle;
+  if (hasJapaneseTitle && (matches.length === 0 || matches[0]?.confidence !== 'high')) {
+    const fallbackQuery = createFallbackSearchQuery(theme, animeTitle);
+    const fallbackMatches = await spotifyClient.searchAndMatch(
+      fallbackQuery,
+      accessToken,
+      searchOptions,
+    );
+
+    // Merge and deduplicate by track ID, keeping higher scores
+    const seen = new Map<string, SpotifyTrackMatch>();
+    for (const m of [...matches, ...fallbackMatches]) {
+      const existing = seen.get(m.track.id);
+      if (!existing || m.score > existing.score) {
+        seen.set(m.track.id, m);
+      }
+    }
+    matches = Array.from(seen.values()).sort((a, b) => b.score - a.score).slice(0, 5);
+  }
 
   // Determine status
   let status: 'matched' | 'needs_review' | 'no_match';
