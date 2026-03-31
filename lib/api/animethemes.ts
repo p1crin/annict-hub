@@ -192,8 +192,19 @@ class AnimeThemesClient {
       const bestVideo = this.getBestVideo(theme);
       const episodeRange = theme.animethemeentries?.[0]?.episodes;
 
+      // Fix: Extract sequence from slug if sequence is null
+      // slug format: "OP1", "ED2", etc.
+      let sequence = theme.sequence;
+      if (sequence === null || sequence === undefined) {
+        const match = theme.slug.match(/^(OP|ED)(\d+)$/);
+        if (match) {
+          sequence = parseInt(match[2], 10);
+        }
+      }
+
       return {
         ...theme,
+        sequence,
         songTitle,
         artistNames,
         bestVideo: bestVideo || undefined,

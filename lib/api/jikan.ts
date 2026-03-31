@@ -104,50 +104,88 @@ class JikanClient {
    * Example: "1: \"Gurenge\" by LiSA (eps 1-19)"
    * Example: "#2: \"Homura (炎)\" by LiSA"
    * Example: "1: \"Guren no Yumiya (紅蓮の弓矢)\" by Linked Horizon (eps 1-13)"
+   * Example: "\"San San Days (燦々デイズ)\" by Spira Spica" (no number)
    */
   parseThemeString(themeString: string, type: 'OP' | 'ED'): JikanParsedTheme | null {
     try {
-      // Match pattern: [#]number: "title" by artist (optional episode info)
-      const regex = /#?(\d+):\s*"([^"]+)"(?:\s+by\s+([^(]+))?(?:\s+\(([^)]+)\))?/;
-      const match = themeString.match(regex);
+      // Pattern 1: [#]number: "title" by artist (optional episode info)
+      const regexWithNumber = /#?(\d+):\s*"([^"]+)"(?:\s+by\s+([^(]+))?(?:\s+\(([^)]+)\))?/;
+      const matchWithNumber = themeString.match(regexWithNumber);
 
-      if (!match) {
-        console.warn(`Failed to parse theme string: ${themeString}`);
-        return null;
-      }
+      if (matchWithNumber) {
+        const [, sequenceStr, rawTitle, rawArtist, episodes] = matchWithNumber;
 
-      const [, sequenceStr, rawTitle, rawArtist, episodes] = match;
+        // Extract Japanese title from parentheses within the title
+        const titleResult = this.extractJapanese(rawTitle);
 
-      // Extract Japanese title from parentheses within the title
-      const titleResult = this.extractJapanese(rawTitle);
-
-      // Extract Japanese artist name from the raw string after "by"
-      let artistBase = rawArtist?.trim();
-      let artistJa: string | undefined;
-      if (artistBase) {
-        // Re-parse artist from raw string to capture Japanese in parens
-        // e.g., 'Linked Horizon (きただにひろし) (eps 1-13)' or 'Linked Horizon (きただにひろし)'
-        const byIndex = themeString.indexOf('" by ');
-        if (byIndex !== -1) {
-          const afterBy = themeString.substring(byIndex + 5);
-          // Remove trailing episode info like (eps 1-13)
-          const withoutEps = afterBy.replace(/\s*\(eps?\s*[\d\s,\-]+\)\s*$/i, '').trim();
-          const artistResult = this.extractJapanese(withoutEps);
-          artistBase = artistResult.base;
-          artistJa = artistResult.japanese;
+        // Extract Japanese artist name from the raw string after "by"
+        let artistBase = rawArtist?.trim();
+        let artistJa: string | undefined;
+        if (artistBase) {
+          // Re-parse artist from raw string to capture Japanese in parens
+          // e.g., 'Linked Horizon (きただにひろし) (eps 1-13)' or 'Linked Horizon (きただにひろし)'
+          const byIndex = themeString.indexOf('" by ');
+          if (byIndex !== -1) {
+            const afterBy = themeString.substring(byIndex + 5);
+            // Remove trailing episode info like (eps 1-13)
+            const withoutEps = afterBy.replace(/\s*\(eps?\s*[\d\s,\-]+\)\s*$/i, '').trim();
+            const artistResult = this.extractJapanese(withoutEps);
+            artistBase = artistResult.base;
+            artistJa = artistResult.japanese;
+          }
         }
+
+        return {
+          sequence: parseInt(sequenceStr, 10),
+          title: titleResult.base,
+          titleJa: titleResult.japanese,
+          artist: artistBase,
+          artistJa,
+          episodes: episodes?.replace(/eps?\s*/i, '').trim(),
+          type,
+          rawString: themeString,
+        };
       }
 
-      return {
-        sequence: parseInt(sequenceStr, 10),
-        title: titleResult.base,
-        titleJa: titleResult.japanese,
-        artist: artistBase,
-        artistJa,
-        episodes: episodes?.replace(/eps?\s*/i, '').trim(),
-        type,
-        rawString: themeString,
-      };
+      // Pattern 2: "title" by artist (optional episode info) - no sequence number
+      const regexWithoutNumber = /"([^"]+)"(?:\s+by\s+([^(]+))?(?:\s+\(([^)]+)\))?/;
+      const matchWithoutNumber = themeString.match(regexWithoutNumber);
+
+      if (matchWithoutNumber) {
+        const [, rawTitle, rawArtist, episodes] = matchWithoutNumber;
+
+        // Extract Japanese title from parentheses within the title
+        const titleResult = this.extractJapanese(rawTitle);
+
+        // Extract Japanese artist name from the raw string after "by"
+        let artistBase = rawArtist?.trim();
+        let artistJa: string | undefined;
+        if (artistBase) {
+          const byIndex = themeString.indexOf('" by ');
+          if (byIndex !== -1) {
+            const afterBy = themeString.substring(byIndex + 5);
+            // Remove trailing episode info like (eps 1-13)
+            const withoutEps = afterBy.replace(/\s*\(eps?\s*[\d\s,\-]+\)\s*$/i, '').trim();
+            const artistResult = this.extractJapanese(withoutEps);
+            artistBase = artistResult.base;
+            artistJa = artistResult.japanese;
+          }
+        }
+
+        return {
+          sequence: -1,  // Will be set from array index in getParsedThemes
+          title: titleResult.base,
+          titleJa: titleResult.japanese,
+          artist: artistBase,
+          artistJa,
+          episodes: episodes?.replace(/eps?\s*/i, '').trim(),
+          type,
+          rawString: themeString,
+        };
+      }
+
+      console.warn(`Failed to parse theme string: ${themeString}`);
+      return null;
     } catch (error) {
       console.error(`Error parsing theme string: ${themeString}`, error);
       return null;
@@ -164,17 +202,25 @@ class JikanClient {
     const parsedThemes: JikanParsedTheme[] = [];
 
     // Parse openings
-    for (const opening of themes.openings) {
-      const parsed = this.parseThemeString(opening, 'OP');
+    for (let i = 0; i < themes.openings.length; i++) {
+      const parsed = this.parseThemeString(themes.openings[i], 'OP');
       if (parsed) {
+        // If sequence is -1 (no number in string), use array index + 1
+        if (parsed.sequence === -1) {
+          parsed.sequence = i + 1;
+        }
         parsedThemes.push(parsed);
       }
     }
 
     // Parse endings
-    for (const ending of themes.endings) {
-      const parsed = this.parseThemeString(ending, 'ED');
+    for (let i = 0; i < themes.endings.length; i++) {
+      const parsed = this.parseThemeString(themes.endings[i], 'ED');
       if (parsed) {
+        // If sequence is -1 (no number in string), use array index + 1
+        if (parsed.sequence === -1) {
+          parsed.sequence = i + 1;
+        }
         parsedThemes.push(parsed);
       }
     }
