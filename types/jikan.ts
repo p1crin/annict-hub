@@ -64,7 +64,9 @@ export interface JikanAnimeThemes {
 export interface JikanParsedTheme {
   sequence: number; // 1, 2, 3, etc.
   title: string;
+  titleJa?: string; // Japanese title extracted from parentheses
   artist?: string;
+  artistJa?: string; // Japanese artist name extracted from parentheses
   episodes?: string; // e.g., "1-12" or "1, 3, 5"
   type: 'OP' | 'ED';
   rawString: string; // Original string from API

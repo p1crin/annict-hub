@@ -204,7 +204,9 @@ export interface AnimeThemesSearchParams {
 
 export interface AnimeThemesThemeWithDetails extends AnimeTheme {
   songTitle?: string;
+  songTitleJa?: string;
   artistNames?: string;
+  artistNamesJa?: string;
   bestVideo?: AnimeThemesVideo;
   episodeRange?: string;
 }
