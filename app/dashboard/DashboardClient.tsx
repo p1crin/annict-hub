@@ -29,6 +29,7 @@ export default function DashboardClient({ session }: DashboardClientProps) {
   // State
   const [anime, setAnime] = useState<AnimeCardData[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingProgress, setLoadingProgress] = useState({ fetched: 0, page: 0 });
   const [isCached, setIsCached] = useState(false);
   const [isBackgroundSyncing, setIsBackgroundSyncing] = useState(false);
   const [selectedAnime, setSelectedAnime] = useState<number[]>([]);
@@ -130,6 +131,7 @@ export default function DashboardClient({ session }: DashboardClientProps) {
 
       // UI更新
       setAnime(Array.from(animeMap.values()));
+      setLoadingProgress({ fetched: animeMap.size, page: 1 });
       setIsCached(firstData.cached || false);
 
       // 続きがあれば取得
@@ -163,6 +165,7 @@ export default function DashboardClient({ session }: DashboardClientProps) {
 
           // UI更新
           setAnime(Array.from(animeMap.values()));
+          setLoadingProgress({ fetched: animeMap.size, page });
 
           if (!data.hasMore) {
             console.log('✅ Finished fetching all anime');
@@ -395,10 +398,89 @@ export default function DashboardClient({ session }: DashboardClientProps) {
   }, [filteredAnime, customOrder]);
 
   if (loading) {
-    const loadingMessage = isCached
-      ? "アニメライブラリを読み込み中..."
-      : "初回読み込み中はデータの取得に数分かかる場合があります";
-    return <Loading message={loadingMessage} fullScreen />;
+    return (
+      <div className="fixed inset-0 bg-gradient-dreamy flex items-center justify-center z-50">
+        <div className="flex flex-col items-center justify-center gap-4 w-full max-w-sm px-6">
+          {/* Spinner */}
+          <div className="relative w-16 h-16">
+            <motion.div
+              className="absolute inset-0 border-4 border-lavender-light rounded-full"
+              animate={{ rotate: 360 }}
+              transition={{ duration: 1.5, repeat: Infinity, ease: 'linear' }}
+              style={{
+                borderTopColor: 'var(--lavender)',
+                borderRightColor: 'var(--peach)',
+              }}
+            />
+            <motion.div
+              className="absolute inset-0 flex items-center justify-center text-2xl"
+              animate={{ scale: [1, 1.2, 1], rotate: [0, 180, 360] }}
+              transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
+            >
+              ✨
+            </motion.div>
+          </div>
+
+          {/* Message */}
+          <motion.p
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="text-gray-600 font-medium text-center"
+          >
+            {isCached
+              ? "アニメライブラリを読み込み中..."
+              : "初回読み込み中はデータの取得に数分かかる場合があります"}
+          </motion.p>
+
+          {/* Progress bar */}
+          {loadingProgress.fetched > 0 && (
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="w-full"
+            >
+              <div className="flex justify-between text-xs text-gray-500 mb-1">
+                <span>{loadingProgress.fetched} 件取得済み</span>
+                <span>ページ {loadingProgress.page}</span>
+              </div>
+              <div className="w-full h-2 bg-white/60 rounded-full overflow-hidden shadow-inner">
+                <motion.div
+                  className="h-full rounded-full"
+                  style={{
+                    background: 'linear-gradient(90deg, var(--lavender), var(--peach))',
+                  }}
+                  initial={{ width: '0%' }}
+                  animate={{ width: '100%' }}
+                  transition={{
+                    duration: 2,
+                    repeat: Infinity,
+                    ease: 'easeInOut',
+                  }}
+                />
+              </div>
+            </motion.div>
+          )}
+
+          {/* Floating decorations */}
+          <div className="relative w-full h-8">
+            <motion.div
+              className="absolute left-1/4 text-xl"
+              animate={{ y: [0, -10, 0], opacity: [0.3, 0.7, 0.3] }}
+              transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
+            >
+              ♪
+            </motion.div>
+            <motion.div
+              className="absolute right-1/4 text-xl"
+              animate={{ y: [0, -10, 0], opacity: [0.3, 0.7, 0.3] }}
+              transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut', delay: 1 }}
+            >
+              ♪
+            </motion.div>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   return (
