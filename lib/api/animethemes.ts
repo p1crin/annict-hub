@@ -37,6 +37,7 @@ class AnimeThemesClient {
   async searchByMalId(malId: number): Promise<AnimeThemesAnime | null> {
     try {
       const params: AnimeThemesSearchParams = {
+        'filter[has]': 'resources',
         'filter[site]': 'MyAnimeList',
         'filter[external_id]': malId,
         include:
