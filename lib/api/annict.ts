@@ -135,6 +135,7 @@ class AnnictClient {
                   titleKana
                   titleEn
                   malAnimeId
+                  syobocalTid
                   seasonYear
                   seasonName
                   episodesCount
@@ -244,6 +245,7 @@ class AnnictClient {
             title
             titleEn
             malAnimeId
+            syobocalTid
             seasonYear
             seasonName
             episodesCount

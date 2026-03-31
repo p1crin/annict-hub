@@ -6,7 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth/session';
 import { matchAnime } from '@/lib/matching/anime-matcher';
-import { jikanClient } from '@/lib/api/jikan';
+import { syobocalClient } from '@/lib/api/syobocal';
 import { supabase, getServiceRoleClient } from '@/lib/db/supabase';
 import type { ThemeSongData } from '@/types/app';
 import type { AnimeCacheRow, ThemeSongInsert, ThemeSongRow } from '@/types/supabase';
@@ -119,16 +119,38 @@ export async function GET(
       });
     }
 
-    // Enrich with Japanese titles from Jikan
-    const jikanThemes = work.malAnimeId
-      ? await jikanClient.getParsedThemes(work.malAnimeId)
-      : [];
+    // Enrich with Japanese titles from Syobocal
+    let syobocalThemes: { op: Array<{ title: string; artist?: string; episode?: string }>; ed: Array<{ title: string; artist?: string; episode?: string }> } = { op: [], ed: [] };
+
+    if (animeCache.syobocal_tid) {
+      console.log(`[Syobocal] Fetching themes for TID ${animeCache.syobocal_tid}`);
+      const syobocalResult = await syobocalClient.getThemes(animeCache.syobocal_tid.toString());
+
+      if (syobocalResult.success && syobocalResult.themes) {
+        syobocalThemes = {
+          op: syobocalResult.themes.op,
+          ed: syobocalResult.themes.ed,
+        };
+        console.log(`[Syobocal] Found ${syobocalThemes.op.length} OP, ${syobocalThemes.ed.length} ED themes`);
+      } else {
+        console.log(`[Syobocal] No themes found or error: ${syobocalResult.error}`);
+      }
+    } else {
+      console.log(`[Syobocal] No syobocal_tid available for anime ${annictWorkId}`);
+    }
 
     // Convert to ThemeSongData
     const themes: ThemeSongData[] = result.themes.map((theme: AnimeThemesThemeWithDetails) => {
-      const jikanMatch = jikanThemes.find(
-        (jt) => jt.type === theme.type && jt.sequence === theme.sequence
-      );
+      // Match Syobocal theme by type and sequence (1-indexed)
+      const syobocalThemeList = theme.type === 'OP' ? syobocalThemes.op : syobocalThemes.ed;
+      const syobocalMatch = syobocalThemeList[theme.sequence - 1]; // Convert to 0-indexed
+
+      // Use Syobocal data if available, otherwise use AnimeThemes data
+      const titleJa = syobocalMatch?.title;
+      const artistJa = syobocalMatch?.artist ? syobocalClient.cleanArtistName(syobocalMatch.artist) : undefined;
+      const episodes = syobocalMatch?.episode;
+
+      console.log(`[Match] ${theme.type}${theme.sequence}: AnimeThemes="${theme.songTitle}", Syobocal="${titleJa || 'N/A'}"`);
 
       return {
         id: `${annictWorkId}-${theme.type}${theme.sequence}`,
@@ -136,9 +158,10 @@ export async function GET(
         type: theme.type,
         sequence: theme.sequence,
         title: theme.songTitle || theme.song?.title || `${theme.type}${theme.sequence}`,
-        titleJa: jikanMatch?.titleJa,
+        titleJa: titleJa,
         artist: theme.artistNames,
-        artistJa: jikanMatch?.artistJa,
+        artistJa: artistJa,
+        episodes: episodes,
         videoUrl: theme.bestVideo?.link,
         audioUrl: theme.bestVideo?.audio?.link,
         source: 'animethemes' as const,
@@ -157,7 +180,7 @@ export async function GET(
       title_ja: theme.titleJa,
       artist: theme.artist,
       artist_ja: theme.artistJa,
-      episodes: undefined,
+      episodes: theme.episodes,
       animethemes_id: theme.animethemesThemeId,
       animethemes_slug: `${theme.type}${theme.sequence}`,
       video_url: theme.videoUrl,

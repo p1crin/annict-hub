@@ -64,6 +64,7 @@ export interface AnimeCacheRow {
   title_en?: string;
   title_kana?: string;
   mal_anime_id?: number;
+  syobocal_tid?: number; // Syobocal Title ID for theme lookup
   anilist_anime_id?: number;
   season_year?: number;
   season_name?: string; // 'WINTER' | 'SPRING' | 'SUMMER' | 'AUTUMN'

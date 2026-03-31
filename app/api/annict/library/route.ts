@@ -172,6 +172,7 @@ export async function GET(request: NextRequest) {
         title: work.title,
         title_en: work.titleEn,
         mal_anime_id: malAnimeId,
+        syobocal_tid: work.syobocalTid,
         season_year: work.seasonYear,
         season_name: work.seasonName,
         image_url: imageUrl,
