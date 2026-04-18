@@ -4,6 +4,7 @@
  */
 
 import { parseStringPromise } from 'xml2js';
+import { syobocalRateLimiter } from '../utils/rate-limit';
 import type {
   SyobocalTheme,
   SyobocalThemes,
@@ -84,15 +85,14 @@ async function fetchSyoboiData(
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), timeout);
 
-      const response = await fetch(
-        `${SYOBOCAL_BASE_URL}?Command=TitleLookup&TID=${tid}`,
-        {
+      const response = await syobocalRateLimiter.execute(() =>
+        fetch(`${SYOBOCAL_BASE_URL}?Command=TitleLookup&TID=${tid}`, {
           signal: controller.signal,
           headers: {
             'User-Agent':
               'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
           },
-        }
+        })
       );
 
       clearTimeout(timeoutId);

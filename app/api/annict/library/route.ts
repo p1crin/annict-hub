@@ -77,6 +77,7 @@ export async function GET(request: NextRequest) {
               seasonYear: anime.season_year,
               seasonName: anime.season_name,
               malAnimeId: anime.mal_anime_id,
+              syobocalTid: anime.syobocal_tid,
               status: (anime.status || 'WATCHED') as AnnictStatus,
               hasThemes: false,
               themesCount: 0,
@@ -190,6 +191,8 @@ export async function GET(request: NextRequest) {
         imageUrl: imageUrl || '/placeholder-anime.png',
         seasonYear: work.seasonYear,
         seasonName: work.seasonName,
+        malAnimeId,
+        syobocalTid: work.syobocalTid,
         status: entry.status.state,
         hasThemes: false, // Will be updated when themes are fetched
         themesCount: 0, // Will be updated when themes are fetched

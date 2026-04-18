@@ -82,6 +82,7 @@ export default function PlaylistCreatorClient({ session }: PlaylistCreatorClient
             title: a.title,
             titleEn: a.titleEn,
             malAnimeId: a.malAnimeId,
+            syobocalTid: a.syobocalTid,
             seasonYear: a.seasonYear,
           })),
         }),

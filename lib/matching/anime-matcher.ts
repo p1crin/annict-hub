@@ -1,57 +1,67 @@
 /**
- * Anime Matcher - Match Annict anime with AnimeThemes.moe
+ * Anime Matcher - Match Annict anime to Japanese theme songs via Syobocal
  */
 
-import { animeThemesClient } from '../api/animethemes';
+import { syobocalClient } from '../api/syobocal';
+import { syobocalToThemeDetails } from './syobocal-adapter';
 import type { AnnictWork } from '@/types/annict';
-import type {
-  AnimeThemesMatchResult,
-  AnimeThemesThemeWithDetails,
-} from '@/types/animethemes';
+import type { AnimeThemesThemeWithDetails } from '@/types/animethemes';
 
 export interface AnimeMatchResult {
   success: boolean;
-  animethemesAnimeId: number | undefined;
   annictWorkId: number;
   matched: boolean;
-  animeThemesId?: number;
+  syobocalTid?: number;
   themes?: AnimeThemesThemeWithDetails[];
-  matchMethod?: 'mal_id' | 'title_year' | 'title_only' | 'fuzzy';
-  confidence?: number;
+  matchMethod?: 'syobocal_tid';
   error?: string;
 }
 
 /**
- * Match a single anime from Annict to AnimeThemes.moe
+ * Match a single anime via Syobocal TID from Annict
  */
 export async function matchAnime(work: AnnictWork): Promise<AnimeMatchResult> {
-  try {
-    const result = await animeThemesClient.matchAnime(
-      work.title,
-      work.titleEn || undefined,
-      work.malAnimeId || undefined,
-      work.seasonYear || undefined
-    );
+  if (!work.syobocalTid) {
+    return {
+      success: false,
+      annictWorkId: work.annictId,
+      matched: false,
+      error: 'No syobocalTid on Annict work',
+    };
+  }
 
-    if (result.matched && result.anime) {
+  try {
+    const result = await syobocalClient.getThemes(String(work.syobocalTid));
+
+    if (!result.success || !result.themes) {
       return {
-        success: true,
-        animethemesAnimeId: result.anime.id,
+        success: false,
         annictWorkId: work.annictId,
-        matched: true,
-        animeThemesId: result.anime.id,
-        themes: result.themes,
-        matchMethod: result.matchMethod,
-        confidence: result.confidence,
+        matched: false,
+        syobocalTid: work.syobocalTid,
+        error: result.error || 'Syobocal returned no themes',
+      };
+    }
+
+    const themes = syobocalToThemeDetails(work.syobocalTid, result.themes);
+
+    if (themes.length === 0) {
+      return {
+        success: false,
+        annictWorkId: work.annictId,
+        matched: false,
+        syobocalTid: work.syobocalTid,
+        error: 'No OP/ED themes extracted from Syobocal',
       };
     }
 
     return {
-      success: false,
-      animethemesAnimeId: undefined,
+      success: true,
       annictWorkId: work.annictId,
-      matched: false,
-      error: result.error || 'No match found',
+      matched: true,
+      syobocalTid: work.syobocalTid,
+      themes,
+      matchMethod: 'syobocal_tid',
     };
   } catch (error: any) {
     console.error(
@@ -60,9 +70,9 @@ export async function matchAnime(work: AnnictWork): Promise<AnimeMatchResult> {
     );
     return {
       success: false,
-      animethemesAnimeId: undefined,
       annictWorkId: work.annictId,
       matched: false,
+      syobocalTid: work.syobocalTid,
       error: error.message,
     };
   }

@@ -204,6 +204,11 @@ export const spotifyRateLimiter = new RateLimiter({
   requestsPerMinute: 180,
 });
 
+// Syobocal: no documented limit, conservative 1 req/s to avoid Cloudflare blocks
+export const syobocalRateLimiter = new RateLimiter({
+  requestsPerSecond: 1,
+});
+
 /**
  * Token Bucket Rate Limiter (Alternative Implementation)
  */

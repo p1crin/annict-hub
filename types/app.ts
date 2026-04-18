@@ -19,6 +19,7 @@ export interface AnimeCardData {
   seasonYear?: number;
   seasonName?: string;
   malAnimeId?: number;
+  syobocalTid?: number;
   status?: AnnictStatus;
   episodesCount?: number;
   watchersCount?: number;
@@ -42,7 +43,7 @@ export interface ThemeSongData {
   episodes?: string;
   videoUrl?: string;
   audioUrl?: string;
-  source: 'animethemes' | 'jikan' | 'manual';
+  source: 'animethemes' | 'jikan' | 'manual' | 'syobocal';
   confidence?: 'high' | 'medium' | 'low';
   animethemesAnimeId?: number;
   animethemesThemeId?: number;

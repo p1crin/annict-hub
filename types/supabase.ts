@@ -109,7 +109,7 @@ export interface ThemeSongRow {
   animethemes_slug?: string; // e.g., "OP1"
   video_url?: string; // AnimeThemes.moe video URL
   video_resolution?: number;
-  source: 'animethemes' | 'jikan' | 'manual';
+  source: 'animethemes' | 'jikan' | 'manual' | 'syobocal';
   synced_at: string; // ISO timestamp
   created_at: string; // ISO timestamp
 }

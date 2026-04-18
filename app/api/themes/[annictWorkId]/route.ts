@@ -6,10 +6,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth/session';
 import { matchAnime } from '@/lib/matching/anime-matcher';
-import { syobocalClient } from '@/lib/api/syobocal';
 import { supabase, getServiceRoleClient } from '@/lib/db/supabase';
 import type { ThemeSongData } from '@/types/app';
-import type { AnimeCacheRow, ThemeSongInsert, ThemeSongRow } from '@/types/supabase';
+import type { AnimeCacheRow, ThemeSongRow } from '@/types/supabase';
 import type { AnimeThemesThemeWithDetails } from '@/types/animethemes';
 export const dynamic = 'force-dynamic';
 
@@ -99,13 +98,14 @@ export async function GET(
       );
     }
 
-    // Match themes
+    // Match themes via Syobocal
     const work = {
       id: animeCache.id,
       annictId: animeCache.annict_work_id,
       title: animeCache.title,
       titleEn: animeCache.title_en || undefined,
       malAnimeId: animeCache.mal_anime_id || undefined,
+      syobocalTid: animeCache.syobocal_tid || undefined,
       seasonYear: animeCache.season_year || undefined,
     };
 
@@ -114,60 +114,31 @@ export async function GET(
     if (!result.success || !result.themes || result.themes.length === 0) {
       return NextResponse.json({
         success: false,
-        error: 'No themes found',
+        error: result.error || 'No themes found',
         themes: [],
       });
     }
 
-    // Enrich with Japanese titles from Syobocal
-    let syobocalThemes: { op: Array<{ title: string; artist?: string; episode?: string }>; ed: Array<{ title: string; artist?: string; episode?: string }> } = { op: [], ed: [] };
-
-    if (animeCache.syobocal_tid) {
-      console.log(`[Syobocal] Fetching themes for TID ${animeCache.syobocal_tid}`);
-      const syobocalResult = await syobocalClient.getThemes(animeCache.syobocal_tid.toString());
-
-      if (syobocalResult.success && syobocalResult.themes) {
-        syobocalThemes = {
-          op: syobocalResult.themes.op,
-          ed: syobocalResult.themes.ed,
-        };
-        console.log(`[Syobocal] Found ${syobocalThemes.op.length} OP, ${syobocalThemes.ed.length} ED themes`);
-      } else {
-        console.log(`[Syobocal] No themes found or error: ${syobocalResult.error}`);
-      }
-    } else {
-      console.log(`[Syobocal] No syobocal_tid available for anime ${annictWorkId}`);
-    }
-
-    // Convert to ThemeSongData
+    // Convert to ThemeSongData (Syobocal already provides Japanese titles)
     const themes: ThemeSongData[] = result.themes.map((theme: AnimeThemesThemeWithDetails) => {
-      // Match Syobocal theme by type and sequence (1-indexed)
-      const syobocalThemeList = theme.type === 'OP' ? syobocalThemes.op : syobocalThemes.ed;
-      const syobocalMatch = syobocalThemeList[theme.sequence - 1]; // Convert to 0-indexed
-
-      // Use Syobocal data if available, otherwise use AnimeThemes data
-      const titleJa = syobocalMatch?.title;
-      const artistJa = syobocalMatch?.artist ? syobocalClient.cleanArtistName(syobocalMatch.artist) : undefined;
-      const episodes = syobocalMatch?.episode;
-
-      console.log(`[Match] ${theme.type}${theme.sequence}: AnimeThemes="${theme.songTitle}", Syobocal="${titleJa || 'N/A'}"`);
-
+      const titleJa = theme.songTitleJa;
+      const titleRomaji = theme.songTitle;
       return {
         id: `${annictWorkId}-${theme.type}${theme.sequence}`,
         annictWorkId: result.annictWorkId,
         type: theme.type,
         sequence: theme.sequence,
-        title: theme.songTitle || theme.song?.title || `${theme.type}${theme.sequence}`,
-        titleJa: titleJa,
-        artist: theme.artistNames,
-        artistJa: artistJa,
-        episodes: episodes,
+        title: titleJa || titleRomaji || `${theme.type}${theme.sequence}`,
+        titleJa,
+        artist: theme.artistNamesJa || theme.artistNames,
+        artistJa: theme.artistNamesJa,
+        episodes: theme.episodeRange,
         videoUrl: theme.bestVideo?.link,
         audioUrl: theme.bestVideo?.audio?.link,
-        source: 'animethemes' as const,
+        source: 'syobocal' as const,
         confidence: undefined,
-        animethemesAnimeId: result.animethemesAnimeId,
-        animethemesThemeId: theme.id,
+        animethemesAnimeId: undefined,
+        animethemesThemeId: undefined,
       };
     });
 
@@ -181,7 +152,7 @@ export async function GET(
       artist: theme.artist,
       artist_ja: theme.artistJa,
       episodes: theme.episodes,
-      animethemes_id: theme.animethemesThemeId,
+      animethemes_id: undefined,
       animethemes_slug: `${theme.type}${theme.sequence}`,
       video_url: theme.videoUrl,
       video_resolution: undefined,

@@ -6,12 +6,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth/session';
 import { batchMatchAnime } from '@/lib/matching/anime-matcher';
-import { jikanClient } from '@/lib/api/jikan';
 import { supabase, getServiceRoleClient } from '@/lib/db/supabase';
 import type { AnnictWork } from '@/types/annict';
 import type { ThemeSongData } from '@/types/app';
 import type { AnimeCacheRow, ThemeSongRow } from '@/types/supabase';
-import type { JikanParsedTheme } from '@/types/jikan';
 
 export const dynamic = 'force-dynamic';
 
@@ -21,6 +19,7 @@ interface BatchThemesRequest {
     title: string;
     titleEn?: string;
     malAnimeId?: number;
+    syobocalTid?: number;
     seasonYear?: number;
   }>;
   forceRefresh?: boolean;
@@ -72,6 +71,7 @@ export async function POST(request: NextRequest) {
           title: a.title,
           titleEn: a.titleEn,
           malAnimeId: a.malAnimeId,
+          syobocalTid: a.syobocalTid ?? cache.syobocal_tid,
           seasonYear: a.seasonYear,
         };
       });
@@ -101,7 +101,7 @@ export async function POST(request: NextRequest) {
             episodes: theme.episodes || undefined,
             videoUrl: theme.video_url || undefined,
             audioUrl: undefined,
-            source: theme.source as 'animethemes' | 'jikan' | 'manual',
+            source: theme.source as 'animethemes' | 'jikan' | 'manual' | 'syobocal',
             confidence: undefined,
             animethemesAnimeId: undefined,
             animethemesThemeId: theme.animethemes_id || undefined,
@@ -132,46 +132,30 @@ export async function POST(request: NextRequest) {
         }
       );
 
-      // Enrich with Japanese titles from Jikan API
-      const malIdsToEnrich = worksToMatch
-        .filter(w => w.malAnimeId != null)
-        .map(w => w.malAnimeId!);
-
-      const jikanThemesMap = malIdsToEnrich.length > 0
-        ? await jikanClient.batchGetThemes(malIdsToEnrich)
-        : new Map();
-
       // Convert match results to ThemeSongData and cache
       for (const [annictId, result] of results.entries()) {
         if (result.success && result.themes) {
           const cache = animeCacheMap.get(annictId)!;
-          const work = worksToMatch.find(w => w.annictId === annictId);
-          const jikanThemes = work?.malAnimeId
-            ? jikanThemesMap.get(work.malAnimeId) || []
-            : [];
 
           const themes: ThemeSongData[] = result.themes.map((theme) => {
-            // Find matching Jikan theme by type and sequence for Japanese titles
-            const jikanMatch = jikanThemes.find(
-              (jt: JikanParsedTheme) => jt.type === theme.type && jt.sequence === theme.sequence
-            );
-
+            const titleJa = theme.songTitleJa;
+            const titleRomaji = theme.songTitle;
             return {
               id: `${annictId}-${theme.type}${theme.sequence}`,
               annictWorkId: annictId,
               type: theme.type,
               sequence: theme.sequence,
-              title: theme.songTitle || theme.song?.title || `${theme.type}${theme.sequence}`,
-              titleJa: jikanMatch?.titleJa,
-              artist: theme.artistNames,
-              artistJa: jikanMatch?.artistJa,
+              title: titleJa || titleRomaji || `${theme.type}${theme.sequence}`,
+              titleJa,
+              artist: theme.artistNamesJa || theme.artistNames,
+              artistJa: theme.artistNamesJa,
               episodes: theme.episodeRange,
               videoUrl: theme.bestVideo?.link,
               audioUrl: theme.bestVideo?.audio?.link,
-              source: 'animethemes' as const,
+              source: 'syobocal' as const,
               confidence: undefined,
-              animethemesAnimeId: result.animethemesAnimeId,
-              animethemesThemeId: theme.id,
+              animethemesAnimeId: undefined,
+              animethemesThemeId: undefined,
             };
           });
 
@@ -187,7 +171,7 @@ export async function POST(request: NextRequest) {
             artist: theme.artist,
             artist_ja: theme.artistJa,
             episodes: theme.episodes,
-            animethemes_id: theme.animethemesThemeId,
+            animethemes_id: undefined,
             animethemes_slug: `${theme.type}${theme.sequence}`,
             video_url: theme.videoUrl,
             video_resolution: undefined,
