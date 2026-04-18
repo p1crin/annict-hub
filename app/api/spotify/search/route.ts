@@ -23,11 +23,14 @@ interface SearchRequest {
  * Convert ThemeSongData to AnimeThemesThemeWithDetails
  * This adapter transforms our internal format to the format expected by the matching function
  * Note: Only populates fields actually used by the matching function (songTitle, artistNames, type)
+ *
+ * `syntheticId` must be unique per request — theme.id is a string like "3820-OP1",
+ * and parseInt would collide for multiple themes of the same anime.
  */
-function adaptThemeSongData(theme: ThemeSongData): AnimeThemesThemeWithDetails {
+function adaptThemeSongData(theme: ThemeSongData, syntheticId: number): AnimeThemesThemeWithDetails {
   // Create a minimal object with only the fields used by createSearchQuery
   const adapted = {
-    id: parseInt(theme.id, 10) || 0,
+    id: syntheticId,
     type: theme.type,
     sequence: theme.sequence,
     slug: `${theme.type}${theme.sequence}`,
@@ -130,12 +133,14 @@ export async function POST(request: NextRequest) {
     console.log(`Searching Spotify for ${themes.length} themes`);
 
     // Match themes with Spotify tracks
-    // Transform themes to include animeTitle for each theme
-    const themesWithAnimeTitle = themes.map(theme => {
-      const adapted = adaptThemeSongData(theme);
+    // Assign unique synthetic numeric IDs (index + 1) so the matcher's Map keys
+    // don't collide for multiple themes from the same anime.
+    const themesWithAnimeTitle = themes.map((theme, index) => {
+      const syntheticId = index + 1;
+      const adapted = adaptThemeSongData(theme, syntheticId);
       console.log(`Adapted theme: ${JSON.stringify({
-        original: { title: theme.title, artist: theme.artist },
-        adapted: { songTitle: adapted.songTitle, artistNames: adapted.artistNames }
+        original: { id: theme.id, title: theme.title, artist: theme.artist },
+        adapted: { id: adapted.id, songTitle: adapted.songTitle, artistNames: adapted.artistNames }
       })}`);
       return {
         theme: adapted,
@@ -162,8 +167,16 @@ export async function POST(request: NextRequest) {
     const lowConfidence = matchesArray.filter((m) => m.bestMatch?.confidence === 'low').length;
     const unmatched = matchesArray.filter((m) => m.status === 'no_match').length;
 
-    // Convert Map to object for JSON response
-    const matchesObject = Object.fromEntries(matches);
+    // Re-key response by original theme.id (e.g. "3820-OP1") so the client can
+    // find its themes back via ThemeSongData.id equality.
+    const matchesObject: Record<string, any> = {};
+    themes.forEach((theme, index) => {
+      const syntheticKey = (index + 1).toString();
+      const result = matches.get(syntheticKey);
+      if (result) {
+        matchesObject[theme.id] = { ...result, themeId: theme.id };
+      }
+    });
 
     return NextResponse.json({
       success: true,

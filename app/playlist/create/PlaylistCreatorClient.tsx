@@ -160,22 +160,24 @@ export default function PlaylistCreatorClient({ session }: PlaylistCreatorClient
 
       const data = await response.json();
 
-      // Convert ThemeSpotifyMatch to SpotifyMatchResult
-      const matchesArray = Object.values(data.matches).map((match: any) => {
-        // Find corresponding theme by comparing theme ID
-        const theme = themesToMatch.find(t => t.id === match.themeId || `${t.annictWorkId}-${t.type}${t.sequence}` === match.themeId);
-
-        if (!theme) {
-          console.warn(`Could not find theme for match: ${match.themeId}`);
-        }
-
-        return {
-          theme: theme || themesToMatch[0], // Fallback to first theme if not found
-          spotifyTrack: match.bestMatch?.track || null,
-          score: match.bestMatch?.score,
-          confidence: match.bestMatch?.confidence || 'low',
-        } as SpotifyMatchResult;
-      });
+      // Convert ThemeSpotifyMatch to SpotifyMatchResult.
+      // Backend re-keys `themeId` to the original ThemeSongData.id ("3820-OP1"),
+      // so direct equality is the only match path — no fuzzy fallback.
+      const matchesArray = Object.values(data.matches)
+        .map((match: any) => {
+          const theme = themesToMatch.find(t => t.id === match.themeId);
+          if (!theme) {
+            console.warn(`Could not find theme for match: ${match.themeId}`);
+            return null;
+          }
+          return {
+            theme,
+            spotifyTrack: match.bestMatch?.track || null,
+            score: match.bestMatch?.score,
+            confidence: match.bestMatch?.confidence || 'low',
+          } as SpotifyMatchResult;
+        })
+        .filter((m): m is SpotifyMatchResult => m !== null);
 
       console.log(`Converted ${matchesArray.length} matches`);
 
