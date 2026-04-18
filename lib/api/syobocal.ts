@@ -8,7 +8,6 @@ import { syobocalRateLimiter } from '../utils/rate-limit';
 import type {
   SyobocalTheme,
   SyobocalThemes,
-  SyobocalTitleLookupResponse,
   SyobocalResult,
   SyobocalFetchOptions,
 } from '@/types/syobocal';
@@ -113,11 +112,12 @@ async function fetchSyoboiData(
         return null;
       }
 
-      // Sanitize and parse XML
+      // Sanitize and parse XML (xml2js default wraps children in arrays)
       const sanitized = sanitizeXML(text);
-      const xmlObj: SyobocalTitleLookupResponse = await parseStringPromise(sanitized);
+      const xmlObj: any = await parseStringPromise(sanitized);
 
-      const comment = xmlObj?.TitleLookupResponse?.TitleItems?.TitleItem?.Comment?.trim();
+      const comment = xmlObj?.TitleLookupResponse?.TitleItems?.[0]
+        ?.TitleItem?.[0]?.Comment?.[0]?.trim();
 
       if (comment) {
         // Cache successful response
