@@ -40,7 +40,7 @@ export default function DashboardClient({ session }: DashboardClientProps) {
   const [selectedAnime, setSelectedAnime] = useState<number[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedStatus, setSelectedStatus] = useState<AnnictStatus | 'ALL'>('ALL');
-  const [selectedSeason, setSelectedSeason] = useState<string | 'ALL'>('ALL');
+  const [selectedSeasons, setSelectedSeasons] = useState<string[]>([]);
   const [sortBy, setSortBy] = useState<AnimeSortField>('default');
 
   // Modal state
@@ -285,10 +285,10 @@ export default function DashboardClient({ session }: DashboardClientProps) {
     }
 
     // Filter by season
-    if (selectedSeason !== 'ALL') {
+    if (selectedSeasons.length > 0) {
       filtered = filtered.filter((a) => {
         const season = `${a.seasonYear} ${a.seasonName}`;
-        return season === selectedSeason;
+        return selectedSeasons.includes(season);
       });
     }
 
@@ -303,7 +303,7 @@ export default function DashboardClient({ session }: DashboardClientProps) {
     }
 
     return filtered;
-  }, [anime, selectedStatus, selectedSeason, searchQuery]);
+  }, [anime, selectedStatus, selectedSeasons, searchQuery]);
 
   // Get available seasons
   const availableSeasons = useMemo(() => {
@@ -491,8 +491,8 @@ export default function DashboardClient({ session }: DashboardClientProps) {
           onSearchChange={setSearchQuery}
           selectedStatus={selectedStatus}
           onStatusChange={setSelectedStatus}
-          selectedSeason={selectedSeason}
-          onSeasonChange={setSelectedSeason}
+          selectedSeasons={selectedSeasons}
+          onSeasonsChange={setSelectedSeasons}
           availableSeasons={availableSeasons}
           totalCount={anime.length}
           filteredCount={filteredAnime.length}
@@ -558,7 +558,7 @@ export default function DashboardClient({ session }: DashboardClientProps) {
         />
 
         {/* Load more button */}
-        {hasMore && !searchQuery && selectedStatus === 'ALL' && selectedSeason === 'ALL' && (
+        {hasMore && !searchQuery && selectedStatus === 'ALL' && selectedSeasons.length === 0 && (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}

@@ -27,8 +27,8 @@ interface AnimeFiltersProps {
   onSearchChange: (query: string) => void;
   selectedStatus?: AnnictStatus | 'ALL';
   onStatusChange: (status: AnnictStatus | 'ALL') => void;
-  selectedSeason?: string | 'ALL';
-  onSeasonChange: (season: string | 'ALL') => void;
+  selectedSeasons?: string[];
+  onSeasonsChange: (seasons: string[]) => void;
   availableSeasons?: string[];
   totalCount?: number;
   filteredCount?: number;
@@ -41,8 +41,8 @@ export default function AnimeFilters({
   onSearchChange,
   selectedStatus = 'ALL',
   onStatusChange,
-  selectedSeason = 'ALL',
-  onSeasonChange,
+  selectedSeasons = [],
+  onSeasonsChange,
   availableSeasons = [],
   totalCount = 0,
   filteredCount = 0,
@@ -178,12 +178,12 @@ export default function AnimeFilters({
               </label>
               <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto">
                 <button
-                  onClick={() => onSeasonChange('ALL')}
+                  onClick={() => onSeasonsChange([])}
                   className={`
                     px-4 py-2 rounded-full text-sm font-medium
                     transition-all duration-300
                     ${
-                      selectedSeason === 'ALL'
+                      selectedSeasons.length === 0
                         ? 'bg-gradient-to-r from-lavender to-peach text-white shadow-md scale-105'
                         : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                     }
@@ -191,23 +191,32 @@ export default function AnimeFilters({
                 >
                   すべて
                 </button>
-                {availableSeasons.map((season) => (
-                  <button
-                    key={season}
-                    onClick={() => onSeasonChange(season)}
-                    className={`
-                      px-4 py-2 rounded-full text-sm font-medium
-                      transition-all duration-300
-                      ${
-                        selectedSeason === season
-                          ? 'bg-gradient-to-r from-lavender to-peach text-white shadow-md scale-105'
-                          : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                      }
-                    `}
-                  >
-                    {season}
-                  </button>
-                ))}
+                {availableSeasons.map((season) => {
+                  const isSelected = selectedSeasons.includes(season);
+                  return (
+                    <button
+                      key={season}
+                      onClick={() => {
+                        if (isSelected) {
+                          onSeasonsChange(selectedSeasons.filter((s) => s !== season));
+                        } else {
+                          onSeasonsChange([...selectedSeasons, season]);
+                        }
+                      }}
+                      className={`
+                        px-4 py-2 rounded-full text-sm font-medium
+                        transition-all duration-300
+                        ${
+                          isSelected
+                            ? 'bg-gradient-to-r from-lavender to-peach text-white shadow-md scale-105'
+                            : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                        }
+                      `}
+                    >
+                      {season}
+                    </button>
+                  );
+                })}
               </div>
             </div>
           )}
