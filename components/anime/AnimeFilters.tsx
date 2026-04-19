@@ -72,6 +72,39 @@ export default function AnimeFilters({
         )}
       </div>
 
+      {/* Sort order — always visible */}
+      {onSortChange && (
+        <div className="flex items-center gap-3 mb-4">
+          <span className="text-sm font-medium text-gray-500 shrink-0">並び順</span>
+          <div className="flex flex-wrap gap-2">
+            {(
+              [
+                { value: 'default', label: 'デフォルト' },
+                { value: 'year_desc', label: '新しい順' },
+                { value: 'title_asc', label: 'タイトル順' },
+                { value: 'popularity_desc', label: '人気順' },
+              ] as { value: AnimeSortField; label: string }[]
+            ).map((option) => (
+              <button
+                key={option.value}
+                onClick={() => onSortChange(option.value)}
+                className={`
+                  px-4 py-2 rounded-full text-sm font-medium
+                  transition-all duration-300
+                  ${
+                    sortBy === option.value
+                      ? 'bg-gradient-to-r from-lavender to-peach text-white shadow-md scale-105'
+                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                  }
+                `}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Filter toggle button (mobile) */}
       <button
         onClick={() => setIsExpanded(!isExpanded)}
@@ -86,7 +119,7 @@ export default function AnimeFilters({
         </motion.span>
       </button>
 
-      {/* Filters */}
+      {/* Filters (status + season) */}
       <motion.div
         initial={false}
         animate={{
@@ -159,41 +192,6 @@ export default function AnimeFilters({
                     `}
                   >
                     {season}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Sort order */}
-          {onSortChange && (
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                並び順
-              </label>
-              <div className="flex flex-wrap gap-2">
-                {(
-                  [
-                    { value: 'default', label: 'デフォルト' },
-                    { value: 'year_desc', label: '新しい順' },
-                    { value: 'title_asc', label: 'タイトル順' },
-                    { value: 'popularity_desc', label: '人気順' },
-                  ] as { value: AnimeSortField; label: string }[]
-                ).map((option) => (
-                  <button
-                    key={option.value}
-                    onClick={() => onSortChange(option.value)}
-                    className={`
-                      px-4 py-2 rounded-full text-sm font-medium
-                      transition-all duration-300
-                      ${
-                        sortBy === option.value
-                          ? 'bg-gradient-to-r from-lavender to-peach text-white shadow-md scale-105'
-                          : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                      }
-                    `}
-                  >
-                    {option.label}
                   </button>
                 ))}
               </div>
