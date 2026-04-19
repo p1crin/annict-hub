@@ -292,17 +292,28 @@ export interface SpotifyTrackMatch {
 }
 
 export interface SpotifyMatchReason {
-  type: 'title_exact' | 'title_similar' | 'artist_exact' | 'artist_similar' | 'popularity' | 'release_year';
+  type:
+    | 'title_exact'
+    | 'title_similar'
+    | 'artist_exact'
+    | 'artist_similar'
+    | 'artist_mismatch'
+    | 'popularity'
+    | 'release_year';
   score: number;
   details?: string;
 }
 
 export interface SpotifySearchQuery {
   trackTitle: string;
+  /** Full artist string as received (e.g. "A、B、C"). Used for scoring. */
   artistName?: string;
+  /** Single primary artist, used for Spotify's `artist:"..."` field modifier. */
+  primaryArtist?: string;
+  /** Anime title, used as additional free-text context in fallback searches. */
+  animeTitle?: string;
   albumName?: string;
   year?: number;
-  additionalKeywords?: string[]; // e.g., ['anime', 'opening']
 }
 
 export interface SpotifyMatchingOptions {

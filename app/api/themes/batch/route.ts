@@ -105,6 +105,8 @@ export async function POST(request: NextRequest) {
             confidence: undefined,
             animethemesAnimeId: undefined,
             animethemesThemeId: theme.animethemes_id || undefined,
+            seasonYear: work.seasonYear,
+            animeTitle: work.title,
           }));
         }
       }
@@ -137,6 +139,7 @@ export async function POST(request: NextRequest) {
         if (result.success && result.themes) {
           const cache = animeCacheMap.get(annictId)!;
 
+          const work = works.find((w) => w.annictId === annictId);
           const themes: ThemeSongData[] = result.themes.map((theme) => {
             const titleJa = theme.songTitleJa;
             const titleRomaji = theme.songTitle;
@@ -156,6 +159,8 @@ export async function POST(request: NextRequest) {
               confidence: undefined,
               animethemesAnimeId: undefined,
               animethemesThemeId: undefined,
+              seasonYear: work?.seasonYear,
+              animeTitle: work?.title,
             };
           });
 

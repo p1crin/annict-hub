@@ -3,6 +3,7 @@
  */
 
 import { spotifyClient } from '../api/spotify';
+import { splitPrimaryArtist } from '../api/syobocal';
 import type {
   SpotifySearchQuery,
   SpotifyTrackMatch,
@@ -19,74 +20,137 @@ export interface ThemeSpotifyMatch {
   status: 'matched' | 'needs_review' | 'no_match';
 }
 
+export interface CreateSearchQueryContext {
+  animeTitle?: string;
+  year?: number;
+}
+
 /**
- * Create search query from theme
- * Prefers Japanese titles when available for better Spotify matching
- * No additional keywords to avoid polluting search results
+ * Create a Spotify search query from a theme.
+ *
+ * Prefers Japanese fields (Syobocal route). The full artist string is kept
+ * on `artistName` for scoring, and the split-off primary artist is put on
+ * `primaryArtist` for Spotify's `artist:"..."` field modifier.
  */
 export function createSearchQuery(
   theme: AnimeThemesThemeWithDetails,
-  animeTitle: string
+  context: CreateSearchQueryContext | string = {}
 ): SpotifySearchQuery {
+  // Backwards-compat: old call sites passed animeTitle as a string.
+  const ctx: CreateSearchQueryContext =
+    typeof context === 'string' ? { animeTitle: context } : context;
+
+  const artistName =
+    theme.artistNamesJa || theme.artistNames || theme.song?.artists?.[0]?.name;
+
+  const primaryArtist = artistName
+    ? splitPrimaryArtist(artistName).primary
+    : undefined;
+
   return {
-    trackTitle: theme.songTitleJa || theme.songTitle || theme.song?.title || 'Unknown',
-    artistName: theme.artistNamesJa || theme.artistNames || theme.song?.artists?.[0]?.name,
+    trackTitle:
+      theme.songTitleJa || theme.songTitle || theme.song?.title || 'Unknown',
+    artistName,
+    primaryArtist,
+    animeTitle: ctx.animeTitle,
+    year: ctx.year,
   };
 }
 
 /**
- * Create romanized fallback search query
+ * Romanized fallback when a Japanese-only title produced weak results.
+ * Syobocal doesn't supply romaji, so in practice this only fires when a
+ * non-Syobocal source (song.title) has a separate romanized name.
  */
 function createFallbackSearchQuery(
   theme: AnimeThemesThemeWithDetails,
-  animeTitle: string
-): SpotifySearchQuery {
+  ctx: CreateSearchQueryContext
+): SpotifySearchQuery | null {
+  const romajiTitle = theme.songTitle || theme.song?.title;
+  if (!romajiTitle || romajiTitle === theme.songTitleJa) return null;
+
+  const artistName =
+    theme.artistNames || theme.song?.artists?.[0]?.name || theme.artistNamesJa;
+  const primaryArtist = artistName
+    ? splitPrimaryArtist(artistName).primary
+    : undefined;
+
   return {
-    trackTitle: theme.songTitle || theme.song?.title || 'Unknown',
-    artistName: theme.artistNames || theme.song?.artists?.[0]?.name,
+    trackTitle: romajiTitle,
+    artistName,
+    primaryArtist,
+    animeTitle: ctx.animeTitle,
+    year: ctx.year,
   };
 }
 
-/**
- * Match a single theme to Spotify tracks
- */
-export async function matchThemeToSpotify(
-  theme: AnimeThemesThemeWithDetails,
-  animeTitle: string,
-  accessToken: string,
-  options: SpotifyMatchingOptions = {}
-): Promise<ThemeSpotifyMatch> {
-  const query = createSearchQuery(theme, animeTitle);
-  const searchOptions = { minScore: 50, maxResults: 5, ...options };
-
-  let matches = await spotifyClient.searchAndMatch(
-    query,
-    accessToken,
-    searchOptions,
-  );
-
-  // Fallback: if Japanese title was used but results are poor, retry with romanized
-  const hasJapaneseTitle = theme.songTitleJa && theme.songTitleJa !== theme.songTitle;
-  if (hasJapaneseTitle && (matches.length === 0 || matches[0]?.confidence !== 'high')) {
-    const fallbackQuery = createFallbackSearchQuery(theme, animeTitle);
-    const fallbackMatches = await spotifyClient.searchAndMatch(
-      fallbackQuery,
-      accessToken,
-      searchOptions,
-    );
-
-    // Merge and deduplicate by track ID, keeping higher scores
-    const seen = new Map<string, SpotifyTrackMatch>();
-    for (const m of [...matches, ...fallbackMatches]) {
+function mergeMatches(
+  ...groups: SpotifyTrackMatch[][]
+): SpotifyTrackMatch[] {
+  const seen = new Map<string, SpotifyTrackMatch>();
+  for (const group of groups) {
+    for (const m of group) {
       const existing = seen.get(m.track.id);
       if (!existing || m.score > existing.score) {
         seen.set(m.track.id, m);
       }
     }
-    matches = Array.from(seen.values()).sort((a, b) => b.score - a.score).slice(0, 5);
+  }
+  return Array.from(seen.values())
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 5);
+}
+
+/**
+ * Match a single theme to Spotify tracks.
+ *
+ * Strategy (each stage runs only if the previous didn't yield `high`):
+ *   1. Structured query: `track:"..." artist:"..." year:YYYY`
+ *   2. Free-text query: `title primaryArtist animeTitle`
+ *   3. Romanized fallback (only if theme has a distinct romaji title)
+ */
+export async function matchThemeToSpotify(
+  theme: AnimeThemesThemeWithDetails,
+  animeTitle: string,
+  accessToken: string,
+  options: SpotifyMatchingOptions & { year?: number } = {}
+): Promise<ThemeSpotifyMatch> {
+  const { year, ...matchingOptions } = options;
+  const ctx: CreateSearchQueryContext = { animeTitle, year };
+  const query = createSearchQuery(theme, ctx);
+  const searchOptions = { minScore: 50, maxResults: 5, ...matchingOptions };
+
+  const stage1 = await spotifyClient.searchAndMatch(
+    query,
+    accessToken,
+    searchOptions
+  );
+
+  let matches = stage1;
+
+  // Stage 2: free-text fallback when stage 1 didn't produce a confident hit.
+  if (matches.length === 0 || matches[0]?.confidence !== 'high') {
+    const stage2 = await spotifyClient.searchAndMatchFreeText(
+      query,
+      accessToken,
+      searchOptions
+    );
+    matches = mergeMatches(stage1, stage2);
   }
 
-  // Determine status
+  // Stage 3: romanized retry (rarely applicable on Syobocal route).
+  if (matches.length === 0 || matches[0]?.confidence !== 'high') {
+    const romajiQuery = createFallbackSearchQuery(theme, ctx);
+    if (romajiQuery) {
+      const stage3 = await spotifyClient.searchAndMatch(
+        romajiQuery,
+        accessToken,
+        searchOptions
+      );
+      matches = mergeMatches(matches, stage3);
+    }
+  }
+
   let status: 'matched' | 'needs_review' | 'no_match';
   let bestMatch: SpotifyTrackMatch | undefined;
 
@@ -94,12 +158,7 @@ export async function matchThemeToSpotify(
     status = 'no_match';
   } else {
     bestMatch = matches[0];
-
-    if (bestMatch.confidence === 'high') {
-      status = 'matched';
-    } else {
-      status = 'needs_review';
-    }
+    status = bestMatch.confidence === 'high' ? 'matched' : 'needs_review';
   }
 
   return {
@@ -113,10 +172,15 @@ export async function matchThemeToSpotify(
 }
 
 /**
- * Batch match themes to Spotify
+ * Batch match themes to Spotify. `year` on each entry is forwarded to the
+ * per-theme matcher so the release-year scoring can fire.
  */
 export async function batchMatchThemesToSpotify(
-  themes: Array<{ theme: AnimeThemesThemeWithDetails; animeTitle: string }>,
+  themes: Array<{
+    theme: AnimeThemesThemeWithDetails;
+    animeTitle: string;
+    year?: number;
+  }>,
   accessToken: string,
   options: SpotifyMatchingOptions = {},
   onProgress?: (current: number, total: number, currentTheme?: string) => void
@@ -124,18 +188,16 @@ export async function batchMatchThemesToSpotify(
   const results = new Map<string, ThemeSpotifyMatch>();
 
   for (let i = 0; i < themes.length; i++) {
-    const { theme, animeTitle } = themes[i];
+    const { theme, animeTitle, year } = themes[i];
 
     if (onProgress) {
-      onProgress(i + 1, themes.length, theme.songTitle);
+      onProgress(i + 1, themes.length, theme.songTitleJa || theme.songTitle);
     }
 
-    const result = await matchThemeToSpotify(
-      theme,
-      animeTitle,
-      accessToken,
-      options
-    );
+    const result = await matchThemeToSpotify(theme, animeTitle, accessToken, {
+      ...options,
+      year,
+    });
 
     results.set(theme.id.toString(), result);
 

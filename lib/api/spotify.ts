@@ -20,6 +20,213 @@ import type {
 
 const SPOTIFY_API_BASE = 'https://api.spotify.com/v1';
 
+// ========================================
+// Pure helpers (exported for testing)
+// ========================================
+
+/**
+ * Normalize + compare two strings. Returns 0-1 similarity.
+ * Strips punctuation, lowercases, and uses containment + Levenshtein.
+ */
+export function calculateStringSimilarity(str1: string, str2: string): number {
+  const normalize = (s: string) =>
+    s
+      .toLowerCase()
+      .replace(/[^\w\s\u3000-\u9FFF\uF900-\uFAFF\uFF00-\uFFEF]/g, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+  const a = normalize(str1);
+  const b = normalize(str2);
+
+  if (a === b) return 1.0;
+  if (a.length === 0 || b.length === 0) return 0;
+
+  if (a.includes(b) || b.includes(a)) {
+    const shorter = a.length < b.length ? a : b;
+    const longer = a.length < b.length ? b : a;
+    return shorter.length / longer.length;
+  }
+
+  const longer = a.length > b.length ? a : b;
+  const shorter = a.length > b.length ? b : a;
+  return (longer.length - levenshteinDistance(longer, shorter)) / longer.length;
+}
+
+function levenshteinDistance(str1: string, str2: string): number {
+  const matrix: number[][] = [];
+  for (let i = 0; i <= str2.length; i++) matrix[i] = [i];
+  for (let j = 0; j <= str1.length; j++) matrix[0][j] = j;
+
+  for (let i = 1; i <= str2.length; i++) {
+    for (let j = 1; j <= str1.length; j++) {
+      if (str2.charAt(i - 1) === str1.charAt(j - 1)) {
+        matrix[i][j] = matrix[i - 1][j - 1];
+      } else {
+        matrix[i][j] = Math.min(
+          matrix[i - 1][j - 1] + 1,
+          matrix[i][j - 1] + 1,
+          matrix[i - 1][j] + 1
+        );
+      }
+    }
+  }
+  return matrix[str2.length][str1.length];
+}
+
+/**
+ * Best per-artist similarity.
+ * Checks each Spotify artist individually against both the primary artist and
+ * the full artist string (e.g. "A、B、C"), returning the maximum. This prevents
+ * short primary names from being "drowned" by a long multi-artist field.
+ */
+export function bestArtistSimilarity(
+  trackArtists: Array<{ name: string }>,
+  query: { artistName?: string; primaryArtist?: string }
+): number {
+  const targets = [query.primaryArtist, query.artistName].filter(
+    (s): s is string => !!s && s.length > 0
+  );
+  if (targets.length === 0 || trackArtists.length === 0) return 0;
+
+  let best = 0;
+  for (const artist of trackArtists) {
+    for (const target of targets) {
+      const sim = calculateStringSimilarity(artist.name, target);
+      if (sim > best) best = sim;
+    }
+  }
+  return best;
+}
+
+/**
+ * Score a track against a search query. Pure function — used by the class
+ * method and by tests directly.
+ */
+export function scoreTrackMatch(
+  track: SpotifyTrack,
+  query: SpotifySearchQuery,
+  options: { preferExactArtist?: boolean } = {}
+): { score: number; reasons: SpotifyMatchReason[] } {
+  const reasons: SpotifyMatchReason[] = [];
+  let totalScore = 0;
+
+  // Title similarity (50 points max)
+  const titleSimilarity = calculateStringSimilarity(track.name, query.trackTitle);
+  const titleScore = titleSimilarity * 50;
+  totalScore += titleScore;
+
+  if (titleSimilarity >= 0.9) {
+    reasons.push({
+      type: 'title_exact',
+      score: titleScore,
+      details: 'Exact or near-exact title match',
+    });
+  } else if (titleSimilarity >= 0.6) {
+    reasons.push({
+      type: 'title_similar',
+      score: titleScore,
+      details: `Title similarity: ${(titleSimilarity * 100).toFixed(0)}%`,
+    });
+  }
+
+  // Artist similarity (30 points max, -30 penalty for strong mismatch)
+  const hasArtistQuery = !!(query.artistName || query.primaryArtist);
+  if (hasArtistQuery) {
+    const artistSimilarity = bestArtistSimilarity(track.artists, query);
+    const artistScore = artistSimilarity * 30;
+    totalScore += artistScore;
+
+    if (artistSimilarity >= 0.9) {
+      reasons.push({
+        type: 'artist_exact',
+        score: artistScore,
+        details: 'Exact or near-exact artist match',
+      });
+    } else if (artistSimilarity >= 0.6) {
+      reasons.push({
+        type: 'artist_similar',
+        score: artistScore,
+        details: `Artist similarity: ${(artistSimilarity * 100).toFixed(0)}%`,
+      });
+    }
+
+    // Strong mismatch: a high title match with an unrelated artist is the
+    // single biggest source of wrong bestMatch (see wrong character-song
+    // matches reported in ops). Penalize so those fall below the threshold.
+    if (artistSimilarity < 0.3) {
+      const penalty = options.preferExactArtist ? -50 : -30;
+      totalScore += penalty;
+      reasons.push({
+        type: 'artist_mismatch',
+        score: penalty,
+        details: `Artist mismatch (similarity ${(artistSimilarity * 100).toFixed(0)}%)`,
+      });
+    }
+  }
+
+  // Popularity bonus (10 points max)
+  const popularityScore = (track.popularity / 100) * 10;
+  totalScore += popularityScore;
+  reasons.push({
+    type: 'popularity',
+    score: popularityScore,
+    details: `Popularity: ${track.popularity}/100`,
+  });
+
+  // Release year proximity (10 points max)
+  if (query.year && track.album.release_date) {
+    const releaseYear = parseInt(track.album.release_date.substring(0, 4), 10);
+    const yearDiff = Math.abs(releaseYear - query.year);
+    const yearScore = Math.max(0, 10 - yearDiff);
+    totalScore += yearScore;
+
+    if (yearDiff === 0) {
+      reasons.push({
+        type: 'release_year',
+        score: yearScore,
+        details: 'Same release year',
+      });
+    } else if (yearDiff <= 2) {
+      reasons.push({
+        type: 'release_year',
+        score: yearScore,
+        details: `Release year within ${yearDiff} year(s)`,
+      });
+    }
+  }
+
+  // Clamp to [0, 100] so penalties can't produce negatives and bonuses can't
+  // push above 100 if inputs are extreme.
+  totalScore = Math.max(0, Math.min(100, totalScore));
+  return { score: totalScore, reasons };
+}
+
+/**
+ * Build a Spotify search query string using field modifiers.
+ * Uses `track:"..."` and `artist:"..."` for precision. Strips embedded `"`
+ * since Spotify has no literal-quote escape.
+ */
+export function buildSpotifySearchString(query: SpotifySearchQuery): string {
+  const sanitize = (s: string) => s.replace(/"/g, '').trim();
+  const parts: string[] = [];
+  parts.push(`track:"${sanitize(query.trackTitle)}"`);
+  if (query.primaryArtist) parts.push(`artist:"${sanitize(query.primaryArtist)}"`);
+  if (query.year) parts.push(`year:${query.year}`);
+  return parts.join(' ');
+}
+
+/**
+ * Free-text fallback query. No field modifiers — used when the structured
+ * query returned nothing strong.
+ */
+export function buildFreeTextSearchString(query: SpotifySearchQuery): string {
+  const parts: string[] = [query.trackTitle];
+  if (query.primaryArtist) parts.push(query.primaryArtist);
+  if (query.animeTitle) parts.push(query.animeTitle);
+  return parts.filter((p) => p && p.length > 0).join(' ').trim();
+}
+
 class SpotifyClient {
   private client: AxiosInstance;
 
@@ -84,161 +291,9 @@ class SpotifyClient {
   }
 
   /**
-   * Calculate similarity between two strings (0-1)
-   */
-  private calculateStringSimilarity(str1: string, str2: string): number {
-    // Normalize: lowercase, keep alphanumeric + CJK + Hiragana + Katakana, strip punctuation
-    const normalize = (s: string) =>
-      s.toLowerCase()
-        .replace(/[^\w\s\u3000-\u9FFF\uF900-\uFAFF\uFF00-\uFFEF]/g, '')
-        .replace(/\s+/g, ' ')
-        .trim();
-
-    const normalized1 = normalize(str1);
-    const normalized2 = normalize(str2);
-
-    if (normalized1 === normalized2) return 1.0;
-    if (normalized1.length === 0 || normalized2.length === 0) return 0;
-
-    // Check containment (one string contains the other)
-    if (normalized1.includes(normalized2) || normalized2.includes(normalized1)) {
-      const shorter = normalized1.length < normalized2.length ? normalized1 : normalized2;
-      const longer = normalized1.length < normalized2.length ? normalized2 : normalized1;
-      return shorter.length / longer.length;
-    }
-
-    // Levenshtein distance-based similarity
-    const longer = normalized1.length > normalized2.length ? normalized1 : normalized2;
-    const shorter = normalized1.length > normalized2.length ? normalized2 : normalized1;
-
-    const editDistance = this.levenshteinDistance(longer, shorter);
-    return (longer.length - editDistance) / longer.length;
-  }
-
-  /**
-   * Calculate Levenshtein distance
-   */
-  private levenshteinDistance(str1: string, str2: string): number {
-    const matrix: number[][] = [];
-
-    for (let i = 0; i <= str2.length; i++) {
-      matrix[i] = [i];
-    }
-
-    for (let j = 0; j <= str1.length; j++) {
-      matrix[0][j] = j;
-    }
-
-    for (let i = 1; i <= str2.length; i++) {
-      for (let j = 1; j <= str1.length; j++) {
-        if (str2.charAt(i - 1) === str1.charAt(j - 1)) {
-          matrix[i][j] = matrix[i - 1][j - 1];
-        } else {
-          matrix[i][j] = Math.min(
-            matrix[i - 1][j - 1] + 1,
-            matrix[i][j - 1] + 1,
-            matrix[i - 1][j] + 1
-          );
-        }
-      }
-    }
-
-    return matrix[str2.length][str1.length];
-  }
-
-  /**
-   * Score a track match
-   */
-  private scoreTrackMatch(
-    track: SpotifyTrack,
-    query: SpotifySearchQuery
-  ): { score: number; reasons: SpotifyMatchReason[] } {
-    const reasons: SpotifyMatchReason[] = [];
-    let totalScore = 0;
-
-    // Title similarity (50 points max)
-    const titleSimilarity = this.calculateStringSimilarity(
-      track.name,
-      query.trackTitle
-    );
-    const titleScore = titleSimilarity * 50;
-    totalScore += titleScore;
-
-    if (titleSimilarity >= 0.9) {
-      reasons.push({
-        type: 'title_exact',
-        score: titleScore,
-        details: 'Exact or near-exact title match',
-      });
-    } else if (titleSimilarity >= 0.6) {
-      reasons.push({
-        type: 'title_similar',
-        score: titleScore,
-        details: `Title similarity: ${(titleSimilarity * 100).toFixed(0)}%`,
-      });
-    }
-
-    // Artist similarity (30 points max)
-    if (query.artistName) {
-      const trackArtists = track.artists.map((a) => a.name).join(' ');
-      const artistSimilarity = this.calculateStringSimilarity(
-        trackArtists,
-        query.artistName
-      );
-      const artistScore = artistSimilarity * 30;
-      totalScore += artistScore;
-
-      if (artistSimilarity >= 0.9) {
-        reasons.push({
-          type: 'artist_exact',
-          score: artistScore,
-          details: 'Exact or near-exact artist match',
-        });
-      } else if (artistSimilarity >= 0.6) {
-        reasons.push({
-          type: 'artist_similar',
-          score: artistScore,
-          details: `Artist similarity: ${(artistSimilarity * 100).toFixed(0)}%`,
-        });
-      }
-    }
-
-    // Popularity bonus (10 points max)
-    const popularityScore = (track.popularity / 100) * 10;
-    totalScore += popularityScore;
-    reasons.push({
-      type: 'popularity',
-      score: popularityScore,
-      details: `Popularity: ${track.popularity}/100`,
-    });
-
-    // Release year proximity (10 points max)
-    if (query.year && track.album.release_date) {
-      const releaseYear = parseInt(track.album.release_date.substring(0, 4), 10);
-      const yearDiff = Math.abs(releaseYear - query.year);
-      const yearScore = Math.max(0, 10 - yearDiff);
-      totalScore += yearScore;
-
-      if (yearDiff === 0) {
-        reasons.push({
-          type: 'release_year',
-          score: yearScore,
-          details: 'Same release year',
-        });
-      } else if (yearDiff <= 2) {
-        reasons.push({
-          type: 'release_year',
-          score: yearScore,
-          details: `Release year within ${yearDiff} year(s)`,
-        });
-      }
-    }
-
-    return { score: totalScore, reasons };
-  }
-
-  /**
-   * Search and match tracks with scoring
+   * Search and match tracks with scoring.
+   * Builds a structured Spotify query (track:/artist:/year:) so field
+   * boundaries are clear, then scores each candidate with scoreTrackMatch.
    */
   async searchAndMatch(
     query: SpotifySearchQuery,
@@ -249,40 +304,62 @@ class SpotifyClient {
       minScore = 60,
       maxResults = 5,
       preferExactArtist = true,
-      market = 'JP',
     } = options;
 
-    // Build search query
-    let searchQuery = query.trackTitle;
-
-    if (query.artistName) {
-      searchQuery += ` ${query.artistName}`;
-    }
-
-    if (query.additionalKeywords && query.additionalKeywords.length > 0) {
-      searchQuery += ` ${query.additionalKeywords.join(' ')}`;
-    }
-
-    // Search tracks
+    const searchQuery = buildSpotifySearchString(query);
     const tracks = await this.searchTracks(searchQuery, accessToken, 20);
 
-    // Score each track
     const matches: SpotifyTrackMatch[] = tracks
       .map((track) => {
-        const { score, reasons } = this.scoreTrackMatch(track, query);
+        const { score, reasons } = scoreTrackMatch(track, query, {
+          preferExactArtist,
+        });
 
-        // Determine confidence
         let confidence: 'high' | 'medium' | 'low';
         if (score >= 80) confidence = 'high';
         else if (score >= 60) confidence = 'medium';
         else confidence = 'low';
 
-        return {
-          track,
-          score,
-          reasons,
-          confidence,
-        };
+        return { track, score, reasons, confidence };
+      })
+      .filter((match) => match.score >= minScore)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, maxResults);
+
+    return matches;
+  }
+
+  /**
+   * Free-text variant of searchAndMatch. Used as fallback when the structured
+   * query returns weak results. Builds `title artist animeTitle` without
+   * field modifiers.
+   */
+  async searchAndMatchFreeText(
+    query: SpotifySearchQuery,
+    accessToken: string,
+    options: SpotifyMatchingOptions = {}
+  ): Promise<SpotifyTrackMatch[]> {
+    const {
+      minScore = 60,
+      maxResults = 5,
+      preferExactArtist = true,
+    } = options;
+
+    const searchQuery = buildFreeTextSearchString(query);
+    const tracks = await this.searchTracks(searchQuery, accessToken, 20);
+
+    const matches: SpotifyTrackMatch[] = tracks
+      .map((track) => {
+        const { score, reasons } = scoreTrackMatch(track, query, {
+          preferExactArtist,
+        });
+
+        let confidence: 'high' | 'medium' | 'low';
+        if (score >= 80) confidence = 'high';
+        else if (score >= 60) confidence = 'medium';
+        else confidence = 'low';
+
+        return { track, score, reasons, confidence };
       })
       .filter((match) => match.score >= minScore)
       .sort((a, b) => b.score - a.score)

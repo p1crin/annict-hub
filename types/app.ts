@@ -48,6 +48,10 @@ export interface ThemeSongData {
   animethemesAnimeId?: number;
   animethemesThemeId?: number;
   spotifyMatch?: SpotifyMatchData;
+  /** Anime release year, used by the Spotify scorer for release-year proximity. */
+  seasonYear?: number;
+  /** Anime title, used as free-text context in Spotify fallback searches. */
+  animeTitle?: string;
 }
 
 export interface SpotifyMatchData {

@@ -28,16 +28,24 @@ interface SearchRequest {
  * and parseInt would collide for multiple themes of the same anime.
  */
 function adaptThemeSongData(theme: ThemeSongData, syntheticId: number): AnimeThemesThemeWithDetails {
-  // Create a minimal object with only the fields used by createSearchQuery
+  // For Syobocal-sourced themes, `title` and `titleJa` are the same string.
+  // Leave songTitle undefined in that case so the scorer's "has Japanese-only
+  // title" detection works and the romanized fallback stage stays dormant
+  // instead of re-searching with an identical query.
+  const titleJa = theme.titleJa;
+  const titleOther = theme.title && theme.title !== theme.titleJa ? theme.title : undefined;
+  const artistJa = theme.artistJa;
+  const artistOther = theme.artist && theme.artist !== theme.artistJa ? theme.artist : undefined;
+
   const adapted = {
     id: syntheticId,
     type: theme.type,
     sequence: theme.sequence,
     slug: `${theme.type}${theme.sequence}`,
-    songTitle: theme.title,
-    songTitleJa: theme.titleJa,
-    artistNames: theme.artist,
-    artistNamesJa: theme.artistJa,
+    songTitle: titleOther,
+    songTitleJa: titleJa,
+    artistNames: artistOther,
+    artistNamesJa: artistJa,
     song: theme.title ? {
       id: 0,
       title: theme.title,
@@ -132,19 +140,23 @@ export async function POST(request: NextRequest) {
 
     console.log(`Searching Spotify for ${themes.length} themes`);
 
-    // Match themes with Spotify tracks
+    // Match themes with Spotify tracks.
     // Assign unique synthetic numeric IDs (index + 1) so the matcher's Map keys
-    // don't collide for multiple themes from the same anime.
+    // don't collide for multiple themes from the same anime. Per-theme anime
+    // title and release year are forwarded so the scorer's year proximity and
+    // free-text fallback can use them.
     const themesWithAnimeTitle = themes.map((theme, index) => {
       const syntheticId = index + 1;
       const adapted = adaptThemeSongData(theme, syntheticId);
       console.log(`Adapted theme: ${JSON.stringify({
         original: { id: theme.id, title: theme.title, artist: theme.artist },
-        adapted: { id: adapted.id, songTitle: adapted.songTitle, artistNames: adapted.artistNames }
+        adapted: { id: adapted.id, songTitleJa: adapted.songTitleJa, artistNamesJa: adapted.artistNamesJa },
+        year: theme.seasonYear
       })}`);
       return {
         theme: adapted,
-        animeTitle: animeTitle || ''
+        animeTitle: theme.animeTitle || animeTitle || '',
+        year: theme.seasonYear,
       };
     });
 

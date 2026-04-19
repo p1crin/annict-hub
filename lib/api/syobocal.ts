@@ -18,6 +18,23 @@ const SYOBOCAL_BASE_URL = 'http://cal.syoboi.jp/db.php';
 const syobocalCache = new Map<string, string>();
 
 /**
+ * Split an artist field into its primary name and the full list.
+ * Handles Japanese comma (、), half/full-width commas, & × / feat.
+ * Must be run AFTER cleanArtistName so CV/paren noise is already gone.
+ */
+export function splitPrimaryArtist(artist: string): {
+  primary: string;
+  all: string[];
+} {
+  if (!artist) return { primary: '', all: [] };
+  const parts = artist
+    .split(/[、，,&×\/]|\s+feat\.?\s+|\s+featuring\s+|\s+and\s+/i)
+    .map((p) => p.trim())
+    .filter((p) => p.length > 0);
+  return { primary: parts[0] || artist.trim(), all: parts };
+}
+
+/**
  * Clean artist name by removing CV annotations and excessive parentheses
  */
 export function cleanArtistName(artistString: string): string {

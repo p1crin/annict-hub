@@ -16,15 +16,16 @@ function toTheme(
   theme: SyobocalTheme
 ): AnimeThemesThemeWithDetails {
   const artist = theme.artist ? cleanArtistName(theme.artist) : undefined;
+  // Syobocal has no romanized fields — leave songTitle/artistNames undefined so
+  // the scorer's hasJapaneseTitle gate (songTitleJa && songTitleJa !== songTitle)
+  // correctly detects that a Japanese-only title is in use.
   return {
     id: tid * 100 + (type === 'OP' ? 0 : 50) + sequence,
     type,
     sequence,
     slug: `${type}${sequence}`,
     songTitleJa: theme.title,
-    songTitle: theme.title,
     artistNamesJa: artist,
-    artistNames: artist,
     episodeRange: theme.episode,
   };
 }

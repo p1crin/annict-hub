@@ -75,6 +75,45 @@ describe('spotify-scorer', () => {
 
       expect(query.artistName).toBe('Aoi Eir')
     })
+
+    it('should extract primaryArtist from multi-artist field', () => {
+      const theme = {
+        songTitleJa: 'Song',
+        artistNamesJa: '一年藤組、小澤亜李、M.A.O、村川梨衣',
+      } as AnimeThemesThemeWithDetails
+
+      const query = createSearchQuery(theme, 'Anime Title')
+
+      expect(query.artistName).toBe('一年藤組、小澤亜李、M.A.O、村川梨衣')
+      expect(query.primaryArtist).toBe('一年藤組')
+    })
+
+    it('should accept context object with animeTitle and year', () => {
+      const theme = {
+        songTitleJa: 'MONSTER',
+        artistNamesJa: '藍井エイル',
+      } as AnimeThemesThemeWithDetails
+
+      const query = createSearchQuery(theme, {
+        animeTitle: 'ようこそ実力至上主義の教室へ 4th Season',
+        year: 2025,
+      })
+
+      expect(query.trackTitle).toBe('MONSTER')
+      expect(query.primaryArtist).toBe('藍井エイル')
+      expect(query.animeTitle).toBe('ようこそ実力至上主義の教室へ 4th Season')
+      expect(query.year).toBe(2025)
+    })
+
+    it('should omit primaryArtist when no artist info is available', () => {
+      const theme = {
+        songTitleJa: 'Song',
+      } as AnimeThemesThemeWithDetails
+
+      const query = createSearchQuery(theme, 'Anime Title')
+
+      expect(query.primaryArtist).toBeUndefined()
+    })
   })
 
   describe('getMatchingSummary', () => {
