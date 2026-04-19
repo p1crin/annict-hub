@@ -17,6 +17,14 @@ const SYOBOCAL_BASE_URL = 'http://cal.syoboi.jp/db.php';
 // In-memory cache for Syobocal responses
 const syobocalCache = new Map<string, string>();
 
+function parseRetryAfter(header: string): number {
+  const seconds = parseInt(header, 10);
+  if (!isNaN(seconds)) return seconds * 1000;
+  const date = Date.parse(header);
+  if (!isNaN(date)) return Math.max(0, date - Date.now());
+  return 10_000;
+}
+
 /**
  * Split an artist field into its primary name and the full list.
  * Handles Japanese comma (、), half/full-width commas, & × / feat.
@@ -112,6 +120,18 @@ async function fetchSyoboiData(
       );
 
       clearTimeout(timeoutId);
+
+      if (response.status === 429) {
+        const retryAfter = response.headers.get('Retry-After');
+        const waitMs = retryAfter
+          ? parseRetryAfter(retryAfter)
+          : Math.min(60_000, 10_000 * 2 ** (attempt - 1));
+        console.warn(`[Syobocal] 429 for TID ${tid}, waiting ${waitMs}ms before retry`);
+        await sleep(waitMs);
+        // Don't count 429 as a normal attempt failure — retry immediately
+        attempt--;
+        continue;
+      }
 
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);

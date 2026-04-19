@@ -86,19 +86,12 @@ export async function batchMatchAnime(
   onProgress?: (current: number, total: number, currentAnime?: string) => void
 ): Promise<Map<number, AnimeMatchResult>> {
   const results = new Map<number, AnimeMatchResult>();
-  const CONCURRENCY = 5;
-  let completed = 0;
 
-  for (let i = 0; i < works.length; i += CONCURRENCY) {
-    const chunk = works.slice(i, i + CONCURRENCY);
-    const chunkResults = await Promise.all(
-      chunk.map((work) => matchAnime(work))
-    );
-    chunkResults.forEach((result, j) => {
-      results.set(chunk[j].annictId, result);
-      completed++;
-      if (onProgress) onProgress(completed, works.length, chunk[j].title);
-    });
+  for (let i = 0; i < works.length; i++) {
+    const work = works[i];
+    const result = await matchAnime(work);
+    results.set(work.annictId, result);
+    if (onProgress) onProgress(i + 1, works.length, work.title);
   }
 
   return results;
