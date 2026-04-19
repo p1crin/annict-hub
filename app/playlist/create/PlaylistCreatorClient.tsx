@@ -71,34 +71,44 @@ export default function PlaylistCreatorClient({ session }: PlaylistCreatorClient
     setError(null);
     setProgress({ current: 0, total: selectedAnime.length, message: '主題歌を取得中...' });
 
+    const CHUNK_SIZE = 20;
+    const allThemes: ThemeSongData[] = [];
+
     try {
-      const response = await fetch('/api/themes/batch', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          forceRefresh: true, // Force refresh to bypass potentially corrupted cache
-          anime: selectedAnime.map((a) => ({
-            annictWorkId: a.annictWorkId,
-            title: a.title,
-            titleEn: a.titleEn,
-            malAnimeId: a.malAnimeId,
-            syobocalTid: a.syobocalTid,
-            seasonYear: a.seasonYear,
-          })),
-        }),
-      });
+      for (let i = 0; i < selectedAnime.length; i += CHUNK_SIZE) {
+        const chunk = selectedAnime.slice(i, i + CHUNK_SIZE);
+        const response = await fetch('/api/themes/batch', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            forceRefresh: true,
+            anime: chunk.map((a) => ({
+              annictWorkId: a.annictWorkId,
+              title: a.title,
+              titleEn: a.titleEn,
+              malAnimeId: a.malAnimeId,
+              syobocalTid: a.syobocalTid,
+              seasonYear: a.seasonYear,
+            })),
+          }),
+        });
 
-      if (!response.ok) {
-        throw new Error('主題歌の取得に失敗しました');
+        if (!response.ok) {
+          throw new Error('主題歌の取得に失敗しました');
+        }
+
+        const data = await response.json();
+        Object.values(data.themes).forEach((animeThemes: any) => {
+          allThemes.push(...animeThemes);
+        });
+
+        const processed = Math.min(i + chunk.length, selectedAnime.length);
+        setProgress({
+          current: processed,
+          total: selectedAnime.length,
+          message: `主題歌を取得中... (${processed}/${selectedAnime.length})`,
+        });
       }
-
-      const data = await response.json();
-
-      // Flatten themes from all anime
-      const allThemes: ThemeSongData[] = [];
-      Object.values(data.themes).forEach((animeThemes: any) => {
-        allThemes.push(...animeThemes);
-      });
 
       console.log(`Found ${allThemes.length} themes from ${selectedAnime.length} anime`);
       setThemes(allThemes);
