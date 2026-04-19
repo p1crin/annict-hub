@@ -5,8 +5,20 @@
 
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
+
+function useIsDesktop() {
+  const [isDesktop, setIsDesktop] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia('(min-width: 768px)');
+    setIsDesktop(mq.matches);
+    const handler = (e: MediaQueryListEvent) => setIsDesktop(e.matches);
+    mq.addEventListener('change', handler);
+    return () => mq.removeEventListener('change', handler);
+  }, []);
+  return isDesktop;
+}
 import type { AnnictStatus } from '@/types/annict';
 import type { AnimeSortField } from '@/types/app';
 
@@ -38,6 +50,8 @@ export default function AnimeFilters({
   onSortChange,
 }: AnimeFiltersProps) {
   const [isExpanded, setIsExpanded] = useState(false);
+  const isDesktop = useIsDesktop();
+  const effectiveExpanded = isDesktop || isExpanded;
 
   const statuses: Array<{ value: AnnictStatus | 'ALL'; label: string; emoji: string }> = [
     { value: 'ALL', label: 'すべて', emoji: '📺' },
@@ -123,10 +137,10 @@ export default function AnimeFilters({
       <motion.div
         initial={false}
         animate={{
-          height: isExpanded ? 'auto' : 0,
-          opacity: isExpanded ? 1 : 0,
+          height: effectiveExpanded ? 'auto' : 0,
+          opacity: effectiveExpanded ? 1 : 0,
         }}
-        className="md:block overflow-hidden md:h-auto md:opacity-100"
+        className="overflow-hidden"
       >
         <div className="pt-4 md:pt-0 space-y-4">
           {/* Status filter */}

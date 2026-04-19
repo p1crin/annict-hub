@@ -53,12 +53,11 @@ export async function GET(request: NextRequest) {
 
       if (!cacheError && cachedAnime && cachedAnime.length > 0) {
         const typedCache = cachedAnime as AnimeCacheRow[];
-        // Check if cache is fresh (less than 24 hours old)
         const latestSync = new Date(typedCache[0].synced_at);
         const cacheAge = Date.now() - latestSync.getTime();
-        const twentyFourHours = 24 * 60 * 60 * 1000; // 24 hours
+        const cacheTtl = 5 * 60 * 1000; // 5 minutes
 
-        if (cacheAge < twentyFourHours) {
+        if (cacheAge < cacheTtl) {
           console.log(`Using cached data (${typedCache.length} items, ${Math.round(cacheAge / 1000 / 60)} minutes old)`);
 
           // If cache count is a multiple of 50, it might be incomplete

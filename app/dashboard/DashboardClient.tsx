@@ -319,7 +319,13 @@ export default function DashboardClient({ session }: DashboardClientProps) {
         seasons.add(`${a.seasonYear} ${a.seasonName}`);
       }
     });
-    return Array.from(seasons).sort().reverse();
+    return Array.from(seasons).sort((a, b) => {
+      const [ay, an] = a.split(' ');
+      const [by, bn] = b.split(' ');
+      const yd = Number(by) - Number(ay);
+      if (yd !== 0) return yd;
+      return (SEASON_ORDER[bn] ?? -1) - (SEASON_ORDER[an] ?? -1);
+    });
   }, [anime]);
 
   // Sort filtered anime
@@ -330,7 +336,7 @@ export default function DashboardClient({ session }: DashboardClientProps) {
       if (sortBy === 'year_desc') {
         const yearDiff = (b.seasonYear ?? -Infinity) - (a.seasonYear ?? -Infinity);
         if (yearDiff !== 0) return yearDiff;
-        return (SEASON_ORDER[a.seasonName ?? ''] ?? -1) - (SEASON_ORDER[b.seasonName ?? ''] ?? -1);
+        return (SEASON_ORDER[b.seasonName ?? ''] ?? -1) - (SEASON_ORDER[a.seasonName ?? ''] ?? -1);
       }
       if (sortBy === 'title_asc') {
         return a.title.localeCompare(b.title, 'ja');
