@@ -87,15 +87,13 @@ export interface AnimeFilterOptions {
   minWatchersCount?: number;
   hasThemes?: boolean;
   sortBy?: AnimeSortField;
-  sortDirection?: 'asc' | 'desc';
 }
 
 export type AnimeSortField =
-  | 'title'
-  | 'seasonYear'
-  | 'watchersCount'
-  | 'episodesCount'
-  | 'createdAt';
+  | 'default'
+  | 'year_desc'
+  | 'title_asc'
+  | 'popularity_desc';
 
 export interface SearchState {
   query: string;

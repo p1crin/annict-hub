@@ -7,21 +7,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import {
-  DndContext,
-  closestCenter,
-  KeyboardSensor,
-  PointerSensor,
-  useSensor,
-  useSensors,
-  type DragEndEvent,
-} from '@dnd-kit/core';
-import {
-  SortableContext,
-  rectSortingStrategy,
-  sortableKeyboardCoordinates,
-} from '@dnd-kit/sortable';
-import SortableAnimeCard from './SortableAnimeCard';
+import AnimeCard from './AnimeCard';
 import type { AnimeCardData } from '@/types/app';
 
 interface AnimeGridProps {
@@ -32,8 +18,6 @@ interface AnimeGridProps {
   selectedAnime?: number[];
   onToggleSelect?: (anime: AnimeCardData) => void;
   onAnimeClick?: (anime: AnimeCardData) => void;
-  isSortMode?: boolean;
-  onDragEnd?: (event: DragEndEvent) => void;
 }
 
 export default function AnimeGrid({
@@ -44,26 +28,9 @@ export default function AnimeGrid({
   selectedAnime = [],
   onToggleSelect,
   onAnimeClick,
-  isSortMode = false,
-  onDragEnd,
 }: AnimeGridProps) {
   const observerTarget = useRef<HTMLDivElement>(null);
   const [isIntersecting, setIsIntersecting] = useState(false);
-
-  // Sensors for drag-and-drop
-  const sensors = useSensors(
-    useSensor(PointerSensor, {
-      activationConstraint: {
-        distance: 8, // Require 8px movement before starting drag
-      },
-    }),
-    useSensor(KeyboardSensor, {
-      coordinateGetter: sortableKeyboardCoordinates,
-    })
-  );
-
-  // Get sortable IDs
-  const sortableIds = anime.map((item) => item.annictWorkId);
 
   // Infinite scroll observer
   useEffect(() => {
@@ -112,38 +79,29 @@ export default function AnimeGrid({
   return (
     <div>
       {/* Grid */}
-      <DndContext
-        sensors={sensors}
-        collisionDetection={closestCenter}
-        onDragEnd={onDragEnd}
+      <motion.div
+        className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 md:gap-6"
+        layout
       >
-        <SortableContext items={sortableIds} strategy={rectSortingStrategy}>
-          <motion.div
-            className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 md:gap-6"
-            layout
-          >
-            <AnimatePresence mode="popLayout">
-              {anime.map((item, index) => (
-                <motion.div
-                  key={item.annictWorkId}
-                  initial={{ opacity: 0, scale: 0.9 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.9 }}
-                  transition={{ delay: index * 0.05, duration: 0.3 }}
-                >
-                  <SortableAnimeCard
-                    anime={item}
-                    selected={selectedAnime.includes(item.annictWorkId)}
-                    onSelect={onToggleSelect}
-                    onClick={onAnimeClick}
-                    isSortMode={isSortMode}
-                  />
-                </motion.div>
-              ))}
-            </AnimatePresence>
-          </motion.div>
-        </SortableContext>
-      </DndContext>
+        <AnimatePresence mode="popLayout">
+          {anime.map((item, index) => (
+            <motion.div
+              key={item.annictWorkId}
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.9 }}
+              transition={{ delay: index * 0.05, duration: 0.3 }}
+            >
+              <AnimeCard
+                anime={item}
+                selected={selectedAnime.includes(item.annictWorkId)}
+                onSelect={onToggleSelect}
+                onClick={onAnimeClick}
+              />
+            </motion.div>
+          ))}
+        </AnimatePresence>
+      </motion.div>
 
       {/* Loading indicator */}
       {loading && (

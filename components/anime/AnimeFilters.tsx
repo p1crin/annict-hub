@@ -8,6 +8,7 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import type { AnnictStatus } from '@/types/annict';
+import type { AnimeSortField } from '@/types/app';
 
 interface AnimeFiltersProps {
   searchQuery: string;
@@ -19,6 +20,8 @@ interface AnimeFiltersProps {
   availableSeasons?: string[];
   totalCount?: number;
   filteredCount?: number;
+  sortBy?: AnimeSortField;
+  onSortChange?: (sort: AnimeSortField) => void;
 }
 
 export default function AnimeFilters({
@@ -31,6 +34,8 @@ export default function AnimeFilters({
   availableSeasons = [],
   totalCount = 0,
   filteredCount = 0,
+  sortBy = 'default',
+  onSortChange,
 }: AnimeFiltersProps) {
   const [isExpanded, setIsExpanded] = useState(false);
 
@@ -154,6 +159,41 @@ export default function AnimeFilters({
                     `}
                   >
                     {season}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Sort order */}
+          {onSortChange && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                並び順
+              </label>
+              <div className="flex flex-wrap gap-2">
+                {(
+                  [
+                    { value: 'default', label: 'デフォルト' },
+                    { value: 'year_desc', label: '新しい順' },
+                    { value: 'title_asc', label: 'タイトル順' },
+                    { value: 'popularity_desc', label: '人気順' },
+                  ] as { value: AnimeSortField; label: string }[]
+                ).map((option) => (
+                  <button
+                    key={option.value}
+                    onClick={() => onSortChange(option.value)}
+                    className={`
+                      px-4 py-2 rounded-full text-sm font-medium
+                      transition-all duration-300
+                      ${
+                        sortBy === option.value
+                          ? 'bg-gradient-to-r from-lavender to-peach text-white shadow-md scale-105'
+                          : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                      }
+                    `}
+                  >
+                    {option.label}
                   </button>
                 ))}
               </div>
