@@ -30,6 +30,7 @@ function cacheRowToCard(row: AnimeCacheRow): AnimeCardData {
     syobocalTid: row.syobocal_tid,
     status: (row.status || 'WATCHED') as AnnictStatus,
     watchersCount: row.watchers_count,
+    trackingKey: row.tracking_key,
     hasThemes: false,
     themesCount: 0,
   };
@@ -38,7 +39,8 @@ function cacheRowToCard(row: AnimeCacheRow): AnimeCardData {
 async function buildCacheInsert(
   entry: AnnictLibraryEntry,
   annictUserId: number,
-  existing: AnimeCacheRow | null
+  existing: AnimeCacheRow | null,
+  trackingKey?: number
 ): Promise<AnimeCacheInsert> {
   const work = entry.work;
   let imageUrl = work.image?.internalUrl;
@@ -65,6 +67,7 @@ async function buildCacheInsert(
     image_url: imageUrl,
     watchers_count: work.watchersCount,
     last_tracked_at: entry.updatedAt,
+    tracking_key: trackingKey,
     status: entry.status.state,
     synced_at: new Date().toISOString(),
   };
@@ -176,8 +179,9 @@ export async function GET(request: NextRequest) {
       console.log(`Full sync: ${allEntries.length} entries from Annict`);
 
       const batch: AnimeCacheInsert[] = [];
-      for (const entry of allEntries) {
-        batch.push(await buildCacheInsert(entry, session.user.annictId, cacheMap.get(entry.work.annictId) ?? null));
+      const baseKey = Date.now();
+      for (let i = 0; i < allEntries.length; i++) {
+        batch.push(await buildCacheInsert(allEntries[i], session.user.annictId, cacheMap.get(allEntries[i].work.annictId) ?? null, baseKey - i));
       }
       await upsertBatch(batch);
 
@@ -203,16 +207,19 @@ export async function GET(request: NextRequest) {
       states,
     });
 
+    // Upsert all page-1 entries to keep tracking_key up-to-date
     const batch: AnimeCacheInsert[] = [];
-    for (const edge of page.edges) {
-      const entry = edge.node;
-      const cached = cacheMap.get(entry.work.annictId);
-      if (!cached || cached.status !== entry.status.state) {
-        batch.push(await buildCacheInsert(entry, session.user.annictId, cached ?? null));
-      }
+    const baseKey = Date.now();
+    for (let i = 0; i < page.edges.length; i++) {
+      const entry = page.edges[i].node;
+      batch.push(await buildCacheInsert(entry, session.user.annictId, cacheMap.get(entry.work.annictId) ?? null, baseKey - i));
     }
 
-    console.log(`Incremental sync: ${batch.length} new/updated entries (of ${page.edges.length} checked)`);
+    const changedCount = page.edges.filter((e) => {
+      const cached = cacheMap.get(e.node.work.annictId);
+      return !cached || cached.status !== e.node.status.state;
+    }).length;
+    console.log(`Incremental sync: ${page.edges.length} entries upserted (${changedCount} status changes)`);
     await upsertBatch(batch);
     batch.forEach((r) => cacheMap.set(r.annict_work_id, r as unknown as AnimeCacheRow));
 

@@ -94,6 +94,7 @@ export default function AnimeFilters({
             {(
               [
                 { value: 'default', label: 'デフォルト' },
+                { value: 'watched_desc', label: '視聴順' },
                 { value: 'year_desc', label: '新しい順' },
                 { value: 'title_asc', label: 'タイトル順' },
                 { value: 'popularity_desc', label: '人気順' },

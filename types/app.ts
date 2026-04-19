@@ -23,6 +23,7 @@ export interface AnimeCardData {
   status?: AnnictStatus;
   episodesCount?: number;
   watchersCount?: number;
+  trackingKey?: number;
   hasThemes: boolean;
   themesCount: number;
 }
@@ -91,6 +92,7 @@ export interface AnimeFilterOptions {
 
 export type AnimeSortField =
   | 'default'
+  | 'watched_desc'
   | 'year_desc'
   | 'title_asc'
   | 'popularity_desc';

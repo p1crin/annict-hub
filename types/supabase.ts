@@ -74,6 +74,7 @@ export interface AnimeCacheRow {
   episodes_count?: number;
   watchers_count?: number;
   last_tracked_at?: string;
+  tracking_key?: number;
   official_site_url?: string;
   twitter_username?: string;
   animethemes_anime_id?: number; // Matched AnimeThemes.moe ID

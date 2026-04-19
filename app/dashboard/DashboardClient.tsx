@@ -333,6 +333,9 @@ export default function DashboardClient({ session }: DashboardClientProps) {
     if (sortBy === 'default') return filteredAnime;
 
     return [...filteredAnime].sort((a, b) => {
+      if (sortBy === 'watched_desc') {
+        return (b.trackingKey ?? -Infinity) - (a.trackingKey ?? -Infinity);
+      }
       if (sortBy === 'year_desc') {
         const yearDiff = (b.seasonYear ?? -Infinity) - (a.seasonYear ?? -Infinity);
         if (yearDiff !== 0) return yearDiff;
