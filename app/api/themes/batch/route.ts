@@ -76,22 +76,29 @@ export async function POST(request: NextRequest) {
         };
       });
 
-    // Check cache first (unless force refresh)
+    // Check cache first (unless force refresh) — single batch query
     const cachedThemes: Record<number, ThemeSongData[]> = {};
 
     if (!forceRefresh) {
-      for (const work of works) {
-        const cache = animeCacheMap.get(work.annictId)!;
-        const { data: cached } = await supabase
-          .from('theme_songs')
-          .select('*')
-          .eq('anime_cache_id', cache.id);
+      const animeCacheIds = works.map((w) => animeCacheMap.get(w.annictId)!.id);
+      const cacheIdToAnnictId = new Map(
+        works.map((w) => [animeCacheMap.get(w.annictId)!.id, w.annictId])
+      );
 
-        if (cached && cached.length > 0) {
-          const typedCache = cached as ThemeSongRow[];
-          cachedThemes[work.annictId] = typedCache.map((theme) => ({
+      const { data: allCachedThemes } = await supabase
+        .from('theme_songs')
+        .select('*')
+        .in('anime_cache_id', animeCacheIds);
+
+      if (allCachedThemes && allCachedThemes.length > 0) {
+        for (const theme of allCachedThemes as ThemeSongRow[]) {
+          const annictId = cacheIdToAnnictId.get(theme.anime_cache_id);
+          if (!annictId) continue;
+          const work = works.find((w) => w.annictId === annictId)!;
+          if (!cachedThemes[annictId]) cachedThemes[annictId] = [];
+          cachedThemes[annictId].push({
             id: theme.id,
-            annictWorkId: work.annictId,
+            annictWorkId: annictId,
             type: theme.type as 'OP' | 'ED',
             sequence: theme.sequence,
             title: theme.title,
@@ -107,7 +114,7 @@ export async function POST(request: NextRequest) {
             animethemesThemeId: theme.animethemes_id || undefined,
             seasonYear: work.seasonYear,
             animeTitle: work.title,
-          }));
+          });
         }
       }
     }
