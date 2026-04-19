@@ -78,6 +78,7 @@ export async function GET(request: NextRequest) {
               malAnimeId: anime.mal_anime_id,
               syobocalTid: anime.syobocal_tid,
               status: (anime.status || 'WATCHED') as AnnictStatus,
+              watchersCount: anime.watchers_count,
               hasThemes: false,
               themesCount: 0,
             }));
@@ -176,6 +177,7 @@ export async function GET(request: NextRequest) {
         season_year: work.seasonYear,
         season_name: work.seasonName,
         image_url: imageUrl,
+        watchers_count: work.watchersCount,
         status: entry.status.state,
         synced_at: new Date().toISOString(),
       };
@@ -193,6 +195,7 @@ export async function GET(request: NextRequest) {
         malAnimeId,
         syobocalTid: work.syobocalTid,
         status: entry.status.state,
+        watchersCount: work.watchersCount,
         hasThemes: false, // Will be updated when themes are fetched
         themesCount: 0, // Will be updated when themes are fetched
       };
