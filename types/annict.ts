@@ -96,6 +96,7 @@ export interface AnnictLibraryEntry {
     state: AnnictStatus;
   };
   note?: string;
+  lastTrackedAt?: string;
   updatedAt?: string;
   work: AnnictWork;
 }

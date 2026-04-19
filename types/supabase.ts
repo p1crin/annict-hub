@@ -73,6 +73,7 @@ export interface AnimeCacheRow {
   media?: string; // 'TV' | 'OVA' | 'MOVIE' | 'WEB' | 'OTHER'
   episodes_count?: number;
   watchers_count?: number;
+  last_tracked_at?: string;
   official_site_url?: string;
   twitter_username?: string;
   animethemes_anime_id?: number; // Matched AnimeThemes.moe ID

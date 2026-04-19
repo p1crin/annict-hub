@@ -1,246 +1,251 @@
 /**
  * Annict Library API
- * Fetches user's anime library with caching
+ * Fetches user's anime library with caching and incremental sync
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth/session';
 import { annictClient } from '@/lib/api/annict';
-import { jikanClient } from '@/lib/api/jikan';
 import { supabase, getServiceRoleClient } from '@/lib/db/supabase';
 import { fetchAnimeImage } from '@/lib/utils/image-fetcher';
-import type { AnnictStatus } from '@/types/annict';
+import type { AnnictLibraryEntry, AnnictStatus } from '@/types/annict';
 import type { AnimeCardData } from '@/types/app';
 import type { AnimeCacheRow, AnimeCacheInsert } from '@/types/supabase';
 
 export const dynamic = 'force-dynamic';
 
-interface LibraryRequestQuery {
-  status?: AnnictStatus;
-  season?: string;
-  limit?: number;
-  forceRefresh?: boolean;
+const CACHE_TTL_MS = 5 * 60 * 1000;       // 5 minutes
+const FULL_SYNC_AGE_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+
+function cacheRowToCard(row: AnimeCacheRow): AnimeCardData {
+  return {
+    id: `${row.annict_work_id}`,
+    annictWorkId: row.annict_work_id,
+    title: row.title,
+    titleEn: row.title_en,
+    imageUrl: row.image_url || '/placeholder-anime.png',
+    seasonYear: row.season_year,
+    seasonName: row.season_name,
+    malAnimeId: row.mal_anime_id,
+    syobocalTid: row.syobocal_tid,
+    status: (row.status || 'WATCHED') as AnnictStatus,
+    watchersCount: row.watchers_count,
+    hasThemes: false,
+    themesCount: 0,
+  };
+}
+
+async function buildCacheInsert(
+  entry: AnnictLibraryEntry,
+  annictUserId: number,
+  existing: AnimeCacheRow | null
+): Promise<AnimeCacheInsert> {
+  const work = entry.work;
+  let imageUrl = work.image?.internalUrl;
+  let malAnimeId = existing?.mal_anime_id ?? work.malAnimeId;
+
+  if (!imageUrl) {
+    if (existing?.image_url) {
+      imageUrl = existing.image_url;
+    } else {
+      const result = await fetchAnimeImage(work);
+      if (result.imageUrl) imageUrl = result.imageUrl;
+    }
+  }
+
+  return {
+    annict_user_id: annictUserId,
+    annict_work_id: work.annictId,
+    title: work.title,
+    title_en: work.titleEn,
+    mal_anime_id: malAnimeId,
+    syobocal_tid: work.syobocalTid,
+    season_year: work.seasonYear,
+    season_name: work.seasonName,
+    image_url: imageUrl,
+    watchers_count: work.watchersCount,
+    last_tracked_at: entry.lastTrackedAt,
+    status: entry.status.state,
+    synced_at: new Date().toISOString(),
+  };
+}
+
+async function upsertBatch(batch: AnimeCacheInsert[]) {
+  if (batch.length === 0) return;
+  const serviceClient = getServiceRoleClient();
+  const { error } = await serviceClient
+    .from('anime_cache')
+    .upsert(batch as any, { onConflict: 'annict_user_id,annict_work_id' });
+  if (error) console.error('Upsert error:', error);
+  else console.log(`Upserted ${batch.length} entries`);
 }
 
 export async function GET(request: NextRequest) {
   try {
-    // Check authentication
     const session = await getSession();
     if (!session) {
-      return NextResponse.json(
-        { error: 'Not authenticated' },
-        { status: 401 }
-      );
+      return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
     }
 
-    // Parse query parameters
     const searchParams = request.nextUrl.searchParams;
     const statusParam = searchParams.get('status') as AnnictStatus | null;
-    const seasonParam = searchParams.get('season');
     const limitParam = searchParams.get('limit');
     const afterCursor = searchParams.get('after');
     const forceRefresh = searchParams.get('forceRefresh') === 'true';
-    const useCache = searchParams.get('cache') !== 'false'; // Default to true
+    const useCache = searchParams.get('cache') !== 'false';
 
-    // If using cache, try to get from Supabase first (only on initial load)
-    // Always get all cached data for this user (ignore limit parameter for cache)
-    if (useCache && !forceRefresh && !afterCursor) {
-      const { data: cachedAnime, error: cacheError } = await supabase
-        .from('anime_cache')
-        .select('*')
-        .eq('annict_user_id', session.user.annictId)
-        .order('synced_at', { ascending: false });
-
-      if (!cacheError && cachedAnime && cachedAnime.length > 0) {
-        const typedCache = cachedAnime as AnimeCacheRow[];
-        const latestSync = new Date(typedCache[0].synced_at);
-        const cacheAge = Date.now() - latestSync.getTime();
-        const cacheTtl = 5 * 60 * 1000; // 5 minutes
-
-        if (cacheAge < cacheTtl) {
-          console.log(`Using cached data (${typedCache.length} items, ${Math.round(cacheAge / 1000 / 60)} minutes old)`);
-
-          // If cache count is a multiple of 50, it might be incomplete
-          // Force a refresh to get all data
-          if (typedCache.length > 0 && typedCache.length % 50 === 0 && !forceRefresh) {
-            console.log(`⚠️  Cache has exactly ${typedCache.length} items (multiple of 50). Triggering full refresh to ensure complete data.`);
-            // Don't use cache, fall through to fetch from Annict
-          } else {
-            // Convert cached data to AnimeCardData
-            const animeData: AnimeCardData[] = typedCache.map((anime) => ({
-              id: `${anime.annict_work_id}`,
-              annictWorkId: anime.annict_work_id,
-              title: anime.title,
-              titleEn: anime.title_en,
-              imageUrl: anime.image_url || '/placeholder-anime.png',
-              seasonYear: anime.season_year,
-              seasonName: anime.season_name,
-              malAnimeId: anime.mal_anime_id,
-              syobocalTid: anime.syobocal_tid,
-              status: (anime.status || 'WATCHED') as AnnictStatus,
-              watchersCount: anime.watchers_count,
-              hasThemes: false,
-              themesCount: 0,
-            }));
-
-            console.log(`✅ Returning complete cached data (${animeData.length} items)`);
-
-            return NextResponse.json({
-              success: true,
-              data: animeData,
-              total: animeData.length,
-              filtered: animeData.length,
-              cached: true,
-              cacheAge: Math.round(cacheAge / 1000 / 60), // minutes
-              hasMore: false,
-              endCursor: null,
-            });
-          }
-        }
-      }
-    }
-
-    // Fetch from Annict (limit to 50 for initial load)
-    // Get all statuses except NO_STATUS (user has registered some status)
     const states: AnnictStatus[] = statusParam
       ? [statusParam]
       : ['WANNA_WATCH', 'WATCHING', 'WATCHED', 'ON_HOLD', 'STOP_WATCHING'];
-    const fetchLimit = limitParam ? parseInt(limitParam, 10) : 50;
 
-    console.log(`Fetching ${fetchLimit} entries from Annict${afterCursor ? ' (page ' + afterCursor + ')' : ''}...`);
-
-    const entries = await annictClient.getLibraryEntries(
-      session.annictToken,
-      {
+    // --- Backward-compat: explicit cursor pagination (used by legacy client) ---
+    if (afterCursor) {
+      const fetchLimit = limitParam ? parseInt(limitParam, 10) : 50;
+      const entries = await annictClient.getLibraryEntries(session.annictToken, {
         first: fetchLimit,
-        after: afterCursor || undefined,
+        after: afterCursor,
         states,
-      }
-    );
-
-    const libraryEntries = entries.edges.map(edge => edge.node);
-    console.log(`Fetched ${libraryEntries.length} entries from Annict`);
-
-    // Process entries and build anime card data
-    const animeData: AnimeCardData[] = [];
-    const cacheDataBatch: AnimeCacheInsert[] = [];
-
-    for (const entry of libraryEntries) {
-      const work = entry.work;
-
-      // Check cache first (unless force refresh) for this user
-      let cachedAnime: AnimeCacheRow | null = null;
-      if (!forceRefresh) {
-        const { data } = await supabase
-          .from('anime_cache')
-          .select('*')
-          .eq('annict_user_id', session.user.annictId)
-          .eq('annict_work_id', work.annictId)
-          .maybeSingle();
-
-        if (data) {
-          cachedAnime = data as AnimeCacheRow;
-        }
-      }
-
-      // Determine image URL
-      let imageUrl = work.image?.internalUrl;
-      let malAnimeId = cachedAnime?.mal_anime_id;
-
-      // If no Annict image and no cached image, try to fetch from Jikan
-      if (!imageUrl && !cachedAnime?.image_url) {
-        console.log(`No Annict image for ${work.title}, fetching from Jikan...`);
-        const imageResult = await fetchAnimeImage(work);
-
-        if (imageResult.imageUrl) {
-          imageUrl = imageResult.imageUrl;
-        }
-      } else if (!imageUrl && cachedAnime?.image_url) {
-        // Reuse cached image
-        console.log(`Using cached image for ${work.title}`);
-        imageUrl = cachedAnime.image_url;
-      }
-
-      // Use MAL ID from work if available
-      if (!malAnimeId && work.malAnimeId) {
-        malAnimeId = work.malAnimeId;
-      }
-
-      // Prepare cache data for batch upsert
-      const cacheData: AnimeCacheInsert = {
-        annict_user_id: session.user.annictId,
-        annict_work_id: work.annictId,
-        title: work.title,
-        title_en: work.titleEn,
-        mal_anime_id: malAnimeId,
-        syobocal_tid: work.syobocalTid,
-        season_year: work.seasonYear,
-        season_name: work.seasonName,
-        image_url: imageUrl,
-        watchers_count: work.watchersCount,
-        status: entry.status.state,
-        synced_at: new Date().toISOString(),
-      };
-      cacheDataBatch.push(cacheData);
-
-      // Build anime card data
-      const cardData: AnimeCardData = {
-        id: `${work.annictId}`,
-        annictWorkId: work.annictId,
-        title: work.title,
-        titleEn: work.titleEn,
-        imageUrl: imageUrl || '/placeholder-anime.png',
-        seasonYear: work.seasonYear,
-        seasonName: work.seasonName,
-        malAnimeId,
-        syobocalTid: work.syobocalTid,
-        status: entry.status.state,
-        watchersCount: work.watchersCount,
-        hasThemes: false, // Will be updated when themes are fetched
-        themesCount: 0, // Will be updated when themes are fetched
-      };
-
-      animeData.push(cardData);
-    }
-
-    // Batch upsert all cache data to Supabase
-    if (cacheDataBatch.length > 0) {
-      console.log(`Batch upserting ${cacheDataBatch.length} anime to cache...`);
-      const serviceClient = getServiceRoleClient();
-      const { error: batchCacheError } = await serviceClient
+      });
+      const libraryEntries = entries.edges.map((e) => e.node);
+      const { data: existingRows } = await supabase
         .from('anime_cache')
-        .upsert(cacheDataBatch as any, { onConflict: 'annict_user_id,annict_work_id' });
+        .select('*')
+        .eq('annict_user_id', session.user.annictId)
+        .in('annict_work_id', libraryEntries.map((e) => e.work.annictId));
+      const existingMap = new Map(
+        ((existingRows ?? []) as AnimeCacheRow[]).map((r) => [r.annict_work_id, r])
+      );
+      const batch: AnimeCacheInsert[] = [];
+      for (const entry of libraryEntries) {
+        batch.push(await buildCacheInsert(entry, session.user.annictId, existingMap.get(entry.work.annictId) ?? null));
+      }
+      await upsertBatch(batch);
+      return NextResponse.json({
+        success: true,
+        data: batch.map((r) => cacheRowToCard(r as unknown as AnimeCacheRow)),
+        total: batch.length,
+        filtered: batch.length,
+        cached: false,
+        hasMore: entries.pageInfo.hasNextPage,
+        endCursor: entries.pageInfo.endCursor || null,
+      });
+    }
 
-      if (batchCacheError) {
-        console.error('Error batch caching anime:', batchCacheError);
-      } else {
-        console.log(`Successfully cached ${cacheDataBatch.length} anime`);
+    // --- Load full cache for this user ---
+    const { data: cachedRows, error: cacheError } = await supabase
+      .from('anime_cache')
+      .select('*')
+      .eq('annict_user_id', session.user.annictId)
+      .order('synced_at', { ascending: false });
+
+    const typedCache = (!cacheError && cachedRows) ? (cachedRows as AnimeCacheRow[]) : [];
+    const cacheMap = new Map(typedCache.map((r) => [r.annict_work_id, r]));
+
+    // --- Fresh cache: serve immediately ---
+    if (useCache && !forceRefresh && typedCache.length > 0) {
+      const latestSynced = new Date(typedCache[0].synced_at).getTime();
+      const cacheAge = Date.now() - latestSynced;
+      if (cacheAge < CACHE_TTL_MS && typedCache.length % 50 !== 0) {
+        console.log(`Cache hit (${typedCache.length} items, ${Math.round(cacheAge / 1000 / 60)} min old)`);
+        return NextResponse.json({
+          success: true,
+          data: typedCache.map(cacheRowToCard),
+          total: typedCache.length,
+          filtered: typedCache.length,
+          cached: true,
+          cacheAge: Math.round(cacheAge / 1000 / 60),
+          hasMore: false,
+          endCursor: null,
+        });
       }
     }
 
-    // Apply limit if specified
-    const limitedData = limitParam
-      ? animeData.slice(0, parseInt(limitParam, 10))
-      : animeData;
+    // --- Decide: full sync or incremental ---
+    const oldestSynced = typedCache.length > 0
+      ? Math.min(...typedCache.map((r) => new Date(r.synced_at).getTime()))
+      : 0;
+    const needsFullSync =
+      forceRefresh ||
+      typedCache.length === 0 ||
+      Date.now() - oldestSynced > FULL_SYNC_AGE_MS;
 
-    // Return response
+    if (needsFullSync) {
+      // ===== Full sync =====
+      console.log(`Full sync started (reason: ${forceRefresh ? 'forceRefresh' : typedCache.length === 0 ? 'empty cache' : 'weekly'})`);
+      const allEntries = await annictClient.getAllLibraryEntries(session.annictToken, states);
+      console.log(`Full sync: ${allEntries.length} entries from Annict`);
+
+      const batch: AnimeCacheInsert[] = [];
+      for (const entry of allEntries) {
+        batch.push(await buildCacheInsert(entry, session.user.annictId, cacheMap.get(entry.work.annictId) ?? null));
+      }
+      await upsertBatch(batch);
+
+      batch.forEach((r) => cacheMap.set(r.annict_work_id, r as unknown as AnimeCacheRow));
+      const allCards = Array.from(cacheMap.values()).map(cacheRowToCard);
+
+      return NextResponse.json({
+        success: true,
+        data: allCards,
+        total: allCards.length,
+        filtered: allCards.length,
+        cached: false,
+        hasMore: false,
+        endCursor: null,
+      });
+    }
+
+    // ===== Incremental sync =====
+    const maxLastTracked = typedCache
+      .map((r) => r.last_tracked_at)
+      .filter(Boolean)
+      .sort()
+      .at(-1) ?? '1970-01-01T00:00:00Z';
+
+    console.log(`Incremental sync (maxLastTracked: ${maxLastTracked})`);
+
+    const batch: AnimeCacheInsert[] = [];
+    let cursor: string | undefined;
+
+    outer: while (true) {
+      const page = await annictClient.getLibraryEntries(session.annictToken, {
+        first: 50,
+        after: cursor,
+        states,
+      });
+
+      for (const edge of page.edges) {
+        const entry = edge.node;
+        if (!entry.lastTrackedAt || entry.lastTrackedAt <= maxLastTracked) {
+          break outer;
+        }
+        batch.push(await buildCacheInsert(entry, session.user.annictId, cacheMap.get(entry.work.annictId) ?? null));
+      }
+
+      if (!page.pageInfo.hasNextPage) break;
+      cursor = page.pageInfo.endCursor ?? undefined;
+    }
+
+    console.log(`Incremental sync: ${batch.length} new/updated entries`);
+    await upsertBatch(batch);
+    batch.forEach((r) => cacheMap.set(r.annict_work_id, r as unknown as AnimeCacheRow));
+
+    const allCards = Array.from(cacheMap.values()).map(cacheRowToCard);
+
     return NextResponse.json({
       success: true,
-      data: limitedData,
-      total: animeData.length,
-      filtered: limitedData.length,
+      data: allCards,
+      total: allCards.length,
+      filtered: allCards.length,
       cached: false,
-      hasMore: entries.pageInfo.hasNextPage,
-      endCursor: entries.pageInfo.endCursor || null,
+      hasMore: false,
+      endCursor: null,
     });
 
   } catch (error: any) {
     console.error('Library API error:', error);
     return NextResponse.json(
-      {
-        error: error.message || 'Failed to fetch library',
-        details: error.response?.data || null,
-      },
+      { error: error.message || 'Failed to fetch library', details: error.response?.data || null },
       { status: 500 }
     );
   }
