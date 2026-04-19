@@ -64,7 +64,7 @@ async function buildCacheInsert(
     season_name: work.seasonName,
     image_url: imageUrl,
     watchers_count: work.watchersCount,
-    last_tracked_at: entry.lastTrackedAt,
+    last_tracked_at: entry.updatedAt,
     status: entry.status.state,
     synced_at: new Date().toISOString(),
   };
@@ -216,7 +216,7 @@ export async function GET(request: NextRequest) {
 
       for (const edge of page.edges) {
         const entry = edge.node;
-        if (!entry.lastTrackedAt || entry.lastTrackedAt <= maxLastTracked) {
+        if (!entry.updatedAt || entry.updatedAt <= maxLastTracked) {
           break outer;
         }
         batch.push(await buildCacheInsert(entry, session.user.annictId, cacheMap.get(entry.work.annictId) ?? null));

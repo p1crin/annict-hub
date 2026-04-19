@@ -125,7 +125,7 @@ class AnnictClient {
             edges {
               node {
                 id
-                lastTrackedAt
+                updatedAt
                 status {
                   state
                 }
