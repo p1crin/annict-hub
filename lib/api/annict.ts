@@ -125,7 +125,6 @@ class AnnictClient {
             edges {
               node {
                 id
-                updatedAt
                 status {
                   state
                 }

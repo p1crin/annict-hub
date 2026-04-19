@@ -196,37 +196,23 @@ export async function GET(request: NextRequest) {
     }
 
     // ===== Incremental sync =====
-    const maxLastTracked = typedCache
-      .map((r) => r.last_tracked_at)
-      .filter(Boolean)
-      .sort()
-      .at(-1) ?? '1970-01-01T00:00:00Z';
-
-    console.log(`Incremental sync (maxLastTracked: ${maxLastTracked})`);
+    // Fetch page 1 (most recently tracked 50 entries) and upsert any that are
+    // new or have a status change. Weekly full sync handles deletions / older entries.
+    const page = await annictClient.getLibraryEntries(session.annictToken, {
+      first: 50,
+      states,
+    });
 
     const batch: AnimeCacheInsert[] = [];
-    let cursor: string | undefined;
-
-    outer: while (true) {
-      const page = await annictClient.getLibraryEntries(session.annictToken, {
-        first: 50,
-        after: cursor,
-        states,
-      });
-
-      for (const edge of page.edges) {
-        const entry = edge.node;
-        if (!entry.updatedAt || entry.updatedAt <= maxLastTracked) {
-          break outer;
-        }
-        batch.push(await buildCacheInsert(entry, session.user.annictId, cacheMap.get(entry.work.annictId) ?? null));
+    for (const edge of page.edges) {
+      const entry = edge.node;
+      const cached = cacheMap.get(entry.work.annictId);
+      if (!cached || cached.status !== entry.status.state) {
+        batch.push(await buildCacheInsert(entry, session.user.annictId, cached ?? null));
       }
-
-      if (!page.pageInfo.hasNextPage) break;
-      cursor = page.pageInfo.endCursor ?? undefined;
     }
 
-    console.log(`Incremental sync: ${batch.length} new/updated entries`);
+    console.log(`Incremental sync: ${batch.length} new/updated entries (of ${page.edges.length} checked)`);
     await upsertBatch(batch);
     batch.forEach((r) => cacheMap.set(r.annict_work_id, r as unknown as AnimeCacheRow));
 
