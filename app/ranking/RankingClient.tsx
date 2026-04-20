@@ -46,8 +46,8 @@ function buildTweetText(top5: AnimeCardData[], selectedSeasons: string[]): strin
           .map(formatSeasonLabel)
           .join(', ');
 
-  const header = `🎬 ${seasonLabel} 視聴アニメ TOP5\n\n`;
-  const footer = '\n\n#AnnictHub';
+  const header = `${seasonLabel} 視聴アニメ TOP5\n\n`;
+  const footer = '';
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? '';
   const urlPart = appUrl ? `\n${appUrl}` : '';
 
