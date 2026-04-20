@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, Reorder, useDragControls } from 'framer-motion';
 import type { AppSession, AnimeCardData } from '@/types/app';
 
 interface RankingClientProps {
@@ -61,7 +61,90 @@ function buildTweetText(top5: AnimeCardData[], selectedSeasons: string[]): strin
   return header + lines.join('\n') + footer + urlPart;
 }
 
-export default function RankingClient({ session }: RankingClientProps) {
+interface RankItemProps {
+  anime: AnimeCardData;
+  index: number;
+  total: number;
+  onMoveUp: () => void;
+  onMoveDown: () => void;
+}
+
+function RankItem({ anime, index, total, onMoveUp, onMoveDown }: RankItemProps) {
+  const controls = useDragControls();
+  const isTop5 = index < 5;
+
+  return (
+    <Reorder.Item
+      value={anime}
+      dragListener={false}
+      dragControls={controls}
+      className={`flex items-center gap-3 bg-white rounded-2xl p-3 shadow-sm select-none ${
+        isTop5 ? '' : 'opacity-40'
+      }`}
+      whileDrag={{ scale: 1.03, boxShadow: '0 8px 24px rgba(0,0,0,0.12)', zIndex: 10 }}
+    >
+      {/* Drag handle */}
+      <div
+        onPointerDown={(e) => controls.start(e)}
+        className="text-gray-300 hover:text-gray-500 cursor-grab active:cursor-grabbing touch-none px-1 shrink-0"
+        aria-label="ドラッグして並び替え"
+      >
+        <svg width="16" height="20" viewBox="0 0 16 20" fill="currentColor">
+          <circle cx="5" cy="4" r="1.5" /><circle cx="11" cy="4" r="1.5" />
+          <circle cx="5" cy="10" r="1.5" /><circle cx="11" cy="10" r="1.5" />
+          <circle cx="5" cy="16" r="1.5" /><circle cx="11" cy="16" r="1.5" />
+        </svg>
+      </div>
+
+      {/* Rank badge */}
+      <span
+        className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold shrink-0 ${
+          isTop5
+            ? 'bg-gradient-to-br from-lavender to-peach text-white'
+            : 'bg-gray-100 text-gray-400'
+        }`}
+      >
+        {index + 1}
+      </span>
+
+      {/* Thumbnail */}
+      <div className="w-10 h-14 relative rounded-lg overflow-hidden shrink-0 bg-gray-100">
+        <Image
+          src={anime.imageUrl || '/placeholder-anime.png'}
+          alt={anime.title}
+          fill
+          className="object-cover"
+          sizes="40px"
+        />
+      </div>
+
+      {/* Title */}
+      <p className="flex-1 text-sm font-medium text-gray-800 line-clamp-2">{anime.title}</p>
+
+      {/* Fallback arrow buttons */}
+      <div className="flex flex-col gap-1 shrink-0">
+        <button
+          onClick={onMoveUp}
+          disabled={index === 0}
+          className="w-7 h-7 rounded-lg bg-gray-100 hover:bg-gray-200 disabled:opacity-30 disabled:cursor-not-allowed text-xs flex items-center justify-center transition-colors"
+          aria-label="上に移動"
+        >
+          ▲
+        </button>
+        <button
+          onClick={onMoveDown}
+          disabled={index === total - 1}
+          className="w-7 h-7 rounded-lg bg-gray-100 hover:bg-gray-200 disabled:opacity-30 disabled:cursor-not-allowed text-xs flex items-center justify-center transition-colors"
+          aria-label="下に移動"
+        >
+          ▼
+        </button>
+      </div>
+    </Reorder.Item>
+  );
+}
+
+export default function RankingClient(_: RankingClientProps) {
   const [step, setStep] = useState<Step>('select');
   const [allAnime, setAllAnime] = useState<AnimeCardData[]>([]);
   const [loading, setLoading] = useState(true);
@@ -254,71 +337,20 @@ export default function RankingClient({ session }: RankingClientProps) {
           /* Step 2: rank */
           <div className="max-w-xl mx-auto">
             <p className="text-sm text-gray-500 mb-4 text-center">
-              ▲▼ で順番を入れ替えてください。上位5件がTOP5になります。
+              ☰ をドラッグして順番を入れ替えてください。上位5件がTOP5になります。
             </p>
-            <div className="space-y-2">
-              <AnimatePresence initial={false}>
-                {ranked.map((anime, index) => (
-                  <motion.div
-                    key={anime.id}
-                    layout
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, scale: 0.9 }}
-                    className={`flex items-center gap-3 bg-white rounded-2xl p-3 shadow-sm transition-opacity ${
-                      index >= 5 ? 'opacity-40' : ''
-                    }`}
-                  >
-                    {/* Rank badge */}
-                    <span
-                      className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold shrink-0 ${
-                        index < 5
-                          ? 'bg-gradient-to-br from-lavender to-peach text-white'
-                          : 'bg-gray-100 text-gray-400'
-                      }`}
-                    >
-                      {index + 1}
-                    </span>
-
-                    {/* Thumbnail */}
-                    <div className="w-10 h-14 relative rounded-lg overflow-hidden shrink-0 bg-gray-100">
-                      <Image
-                        src={anime.imageUrl || '/placeholder-anime.png'}
-                        alt={anime.title}
-                        fill
-                        className="object-cover"
-                        sizes="40px"
-                      />
-                    </div>
-
-                    {/* Title */}
-                    <p className="flex-1 text-sm font-medium text-gray-800 line-clamp-2">
-                      {anime.title}
-                    </p>
-
-                    {/* Move buttons */}
-                    <div className="flex flex-col gap-1 shrink-0">
-                      <button
-                        onClick={() => moveUp(index)}
-                        disabled={index === 0}
-                        className="w-7 h-7 rounded-lg bg-gray-100 hover:bg-gray-200 disabled:opacity-30 disabled:cursor-not-allowed text-xs flex items-center justify-center transition-colors"
-                        aria-label="上に移動"
-                      >
-                        ▲
-                      </button>
-                      <button
-                        onClick={() => moveDown(index)}
-                        disabled={index === ranked.length - 1}
-                        className="w-7 h-7 rounded-lg bg-gray-100 hover:bg-gray-200 disabled:opacity-30 disabled:cursor-not-allowed text-xs flex items-center justify-center transition-colors"
-                        aria-label="下に移動"
-                      >
-                        ▼
-                      </button>
-                    </div>
-                  </motion.div>
-                ))}
-              </AnimatePresence>
-            </div>
+            <Reorder.Group axis="y" values={ranked} onReorder={setRanked} className="space-y-2 list-none p-0">
+              {ranked.map((anime, index) => (
+                <RankItem
+                  key={anime.id}
+                  anime={anime}
+                  index={index}
+                  total={ranked.length}
+                  onMoveUp={() => moveUp(index)}
+                  onMoveDown={() => moveDown(index)}
+                />
+              ))}
+            </Reorder.Group>
             {ranked.length > 5 && (
               <p className="text-xs text-gray-400 text-center mt-2">
                 ※ 6位以下はツイートに含まれません
