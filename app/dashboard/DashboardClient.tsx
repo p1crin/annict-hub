@@ -7,6 +7,7 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import Link from 'next/link';
 import { motion } from 'framer-motion';
 import AnimeGrid from '@/components/anime/AnimeGrid';
 import AnimeFilters from '@/components/anime/AnimeFilters';
@@ -525,6 +526,14 @@ export default function DashboardClient({ session }: DashboardClientProps) {
             </div>
 
             <div className="flex items-center gap-2">
+              {/* Ranking button */}
+              <Link
+                href="/ranking"
+                className="inline-flex items-center px-3 py-1.5 rounded-xl text-sm font-medium bg-gradient-to-r from-yellow-100 to-orange-100 text-orange-700 hover:from-yellow-200 hover:to-orange-200 transition-colors"
+              >
+                🏆 ランキング作成
+              </Link>
+
               {/* Create playlist button */}
               <Button
                 onClick={handleCreatePlaylist}
