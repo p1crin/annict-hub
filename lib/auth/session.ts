@@ -114,14 +114,12 @@ export async function getSession(): Promise<AppSession | null> {
 
     // Check if session is expired
     if (session.expiresAt < new Date()) {
-      await destroySession();
       return null;
     }
 
     return session;
   } catch (error) {
     console.error('Failed to parse session:', error);
-    await destroySession();
     return null;
   }
 }
