@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth/session';
 import { matchAnime } from '@/lib/matching/anime-matcher';
+import { animeThemesClient } from '@/lib/api/animethemes';
 import { supabase, getServiceRoleClient } from '@/lib/db/supabase';
 import type { ThemeSongData } from '@/types/app';
 import type { AnimeCacheRow, ThemeSongRow } from '@/types/supabase';
@@ -119,10 +120,32 @@ export async function GET(
       });
     }
 
+    // Enrich with AnimeThemes video URLs (Syobocal provides only metadata)
+    const videoMap = new Map<string, { videoUrl?: string; audioUrl?: string }>();
+    if (animeCache.mal_anime_id) {
+      try {
+        const atAnime = await animeThemesClient.searchByMalId(animeCache.mal_anime_id);
+        if (atAnime) {
+          const atThemes = animeThemesClient.getThemesWithDetails(atAnime);
+          for (const t of atThemes) {
+            if (t.type !== 'OP' && t.type !== 'ED') continue;
+            const key = `${t.type}${t.sequence}`;
+            videoMap.set(key, {
+              videoUrl: t.bestVideo?.link,
+              audioUrl: t.bestVideo?.audio?.link,
+            });
+          }
+        }
+      } catch (e) {
+        console.error('Failed to fetch AnimeThemes videos:', e);
+      }
+    }
+
     // Convert to ThemeSongData (Syobocal already provides Japanese titles)
     const themes: ThemeSongData[] = result.themes.map((theme: AnimeThemesThemeWithDetails) => {
       const titleJa = theme.songTitleJa;
       const titleRomaji = theme.songTitle;
+      const video = videoMap.get(`${theme.type}${theme.sequence}`);
       return {
         id: `${annictWorkId}-${theme.type}${theme.sequence}`,
         annictWorkId: result.annictWorkId,
@@ -133,8 +156,8 @@ export async function GET(
         artist: theme.artistNamesJa || theme.artistNames,
         artistJa: theme.artistNamesJa,
         episodes: theme.episodeRange,
-        videoUrl: theme.bestVideo?.link,
-        audioUrl: theme.bestVideo?.audio?.link,
+        videoUrl: video?.videoUrl ?? theme.bestVideo?.link,
+        audioUrl: video?.audioUrl ?? theme.bestVideo?.audio?.link,
         source: 'syobocal' as const,
         confidence: undefined,
         animethemesAnimeId: undefined,
