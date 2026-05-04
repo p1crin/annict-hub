@@ -29,6 +29,7 @@ export default function AnimeDetailModal({
   const [themes, setThemes] = useState<ThemeSongData[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [playingThemeId, setPlayingThemeId] = useState<string | null>(null);
 
   // Fetch theme songs when modal opens
   useEffect(() => {
@@ -179,7 +180,14 @@ export default function AnimeDetailModal({
                         </h3>
                         <div className="space-y-2">
                           {openings.map((theme, index) => (
-                            <ThemeItem key={index} theme={theme} />
+                            <ThemeItem
+                              key={index}
+                              theme={theme}
+                              isPlaying={playingThemeId === theme.id}
+                              onTogglePlay={(id) =>
+                                setPlayingThemeId((cur) => (cur === id ? null : id))
+                              }
+                            />
                           ))}
                         </div>
                       </div>
@@ -193,7 +201,14 @@ export default function AnimeDetailModal({
                         </h3>
                         <div className="space-y-2">
                           {endings.map((theme, index) => (
-                            <ThemeItem key={index} theme={theme} />
+                            <ThemeItem
+                              key={index}
+                              theme={theme}
+                              isPlaying={playingThemeId === theme.id}
+                              onTogglePlay={(id) =>
+                                setPlayingThemeId((cur) => (cur === id ? null : id))
+                              }
+                            />
                           ))}
                         </div>
                       </div>
@@ -231,11 +246,21 @@ export default function AnimeDetailModal({
 /**
  * Theme Item Component
  */
-function ThemeItem({ theme }: { theme: ThemeSongData }) {
+function ThemeItem({
+  theme,
+  isPlaying,
+  onTogglePlay,
+}: {
+  theme: ThemeSongData;
+  isPlaying: boolean;
+  onTogglePlay: (id: string) => void;
+}) {
+  const hasMedia = !!(theme.videoUrl || theme.audioUrl);
+
   return (
     <div className="bg-gray-50 rounded-xl p-4 hover:bg-gray-100 transition-colors">
       <div className="flex items-start justify-between gap-4">
-        <div className="flex-1">
+        <div className="flex-1 min-w-0">
           {/* Theme Type and Sequence */}
           <p className="text-xs text-gray-500 mb-1">
             {theme.type}
@@ -244,9 +269,20 @@ function ThemeItem({ theme }: { theme: ThemeSongData }) {
           </p>
 
           {/* Title */}
-          <p className="font-semibold text-gray-800 mb-1">
-            {theme.titleJa || theme.title}
-          </p>
+          {hasMedia ? (
+            <button
+              type="button"
+              onClick={() => onTogglePlay(theme.id)}
+              className="font-semibold text-lavender hover:text-peach mb-1 text-left flex items-center gap-1 transition-colors"
+            >
+              <span>{isPlaying ? '■' : '▶'}</span>
+              <span>{theme.titleJa || theme.title}</span>
+            </button>
+          ) : (
+            <p className="font-semibold text-gray-800 mb-1">
+              {theme.titleJa || theme.title}
+            </p>
+          )}
           {theme.titleJa && theme.titleJa !== theme.title && (
             <p className="text-xs text-gray-400 mb-1">{theme.title}</p>
           )}
@@ -279,6 +315,30 @@ function ThemeItem({ theme }: { theme: ThemeSongData }) {
           </a>
         )}
       </div>
+
+      {/* Inline Player */}
+      {isPlaying && (
+        <>
+          {theme.videoUrl ? (
+            <video
+              key={theme.videoUrl}
+              src={theme.videoUrl}
+              controls
+              autoPlay
+              playsInline
+              className="w-full mt-3 rounded-lg"
+            />
+          ) : theme.audioUrl ? (
+            <audio
+              key={theme.audioUrl}
+              src={theme.audioUrl}
+              controls
+              autoPlay
+              className="w-full mt-3"
+            />
+          ) : null}
+        </>
+      )}
     </div>
   );
 }
